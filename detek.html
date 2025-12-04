@@ -263,7 +263,7 @@
 
             <div class="card">
                 <h3>💡 Cara Kerja</h3>
-                <p class="small">Demo satu file ini menggunakan TensorFlow.js (<code>coco-ssd</code>) untuk mendeteksi objek secara real-time dari kamera. Untuk setiap kotak pembatas yang terdeteksi, sistem mengambil sampel piksel untuk menghitung **warna dominan** (ditampilkan sebagai teks, cth: Merah) dan — jika sudah dikalibrasi — **memperkirakan jarak** menggunakan formula sederhana kamera lubang jarum.</p>
+                <p class="small">Demo satu file ini menggunakan TensorFlow.js (<code>coco-ssd</code>) untuk mendeteksi objek. Warna diidentifikasi menggunakan model **HSV** (Hue, Saturation, Value) untuk akurasi yang lebih baik daripada RGB mentah, dan jarak diperkirakan menggunakan kalibrasi lensa.</p>
 
                 <hr/>
 
@@ -278,9 +278,9 @@
 
                 <h3>Catatan & Tips</h3>
                 <ul class="small">
+                    <li>**Pencahayaan yang baik sangat krusial** agar deteksi warna HSV berhasil. Cahaya redup dapat menarik hasil ke "Hitam" atau "Abu-abu".</li>
                     <li>Kalibrasi bergantung pada kamera dan lensa Anda — lakukan kalibrasi ulang jika perangkat berubah.</li>
-                    <li>Estimasi jarak bersifat perkiraan — cocok untuk jarak relatif / tujuan demo.</li>
-                    <li>Jika model gagal dimuat, periksa akses jaringan / CDN (demo ini menggunakan CDN publik).</li>
+                    <li>Estimasi jarak bersifat perkiraan.</li>
                 </ul>
             </div>
         </div>
@@ -292,11 +292,10 @@
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
 
     <script>
-        // Simple single-file detector + color + distance
+        // DOM Elements
         const video = document.getElementById('video');
         const overlay = document.getElementById('overlay');
         const ctx = overlay.getContext('2d');
-
         const cameraList = document.getElementById('cameraList');
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
@@ -305,12 +304,10 @@
         const lastDetect = document.getElementById('lastDetect');
         const focalEl = document.getElementById('focal');
         const estDistEl = document.getElementById('estDist');
-
         const knownWidthInput = document.getElementById('knownWidth');
         const knownDistanceInput = document.getElementById('knownDistance');
         const classForCalibration = document.getElementById('classForCalibration');
         const calibrateBtn = document.getElementById('calibrateBtn');
-
         const skipFrames = document.getElementById('skipFrames');
         const showBoxes = document.getElementById('showBoxes');
         const showLabels = document.getElementById('showLabels');
@@ -320,12 +317,13 @@
         let running = false;
         let rafId = null;
         let frameCount = 0;
-        let lastTime = performance.now();
         let lastFpsTime = performance.now();
         let framesForFps = 0;
 
         // Calibration storage (per session)
         let calibration = { focalLength: null, realWidthCm: null, calibratedClass: null };
+
+        // --- Fungsi Utilitas Kamera & Model ---
 
         async function listCameras(){
             const devices = await navigator.mediaDevices.enumerateDevices();
@@ -341,11 +339,12 @@
         async function startCamera(){
             if(stream) stopCamera();
             const deviceId = cameraList.value || undefined;
-            // Gunakan resolusi 640x480 agar konsisten dengan ukuran video-wrap
-            stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: deviceId ? { exact: deviceId } : undefined, width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
+            stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { deviceId: deviceId ? { exact: deviceId } : undefined, width: { ideal: 640 }, height: { ideal: 480 } }, 
+                audio: false 
+            });
             video.srcObject = stream;
             await video.play();
-            // Tunggu hingga metadata video dimuat
             await new Promise(resolve => video.onloadedmetadata = resolve);
             overlay.width = video.videoWidth;
             overlay.height = video.videoHeight;
@@ -368,15 +367,105 @@
             } catch (error) {
                 modelStatus.textContent = 'Gagal memuat';
                 console.error("Gagal memuat model:", error);
-                alert('Gagal memuat model TensorFlow.js. Coba lagi atau periksa koneksi.');
             }
         }
+
+        // --- Fungsi Utilitas Warna (Diperbaiki) ---
+
+        function rgbToHsv(r, g, b) {
+            r /= 255; g /= 255; b /= 255;
+            const max = Math.max(r, g, b), min = Math.min(r, g, b);
+            let h, s, v = max;
+
+            const delta = max - min;
+            s = max === 0 ? 0 : delta / max;
+
+            if (delta === 0) h = 0;
+            else {
+                switch (max) {
+                    case r: h = (g - b) / delta + (g < b ? 6 : 0); break;
+                    case g: h = (b - r) / delta + 2; break;
+                    case b: h = (r - g) / delta + 4; break;
+                }
+                h /= 6;
+            }
+            return { h: h * 360, s: s * 100, v: v * 100 }; // h: 0-360, s,v: 0-100
+        }
+
+        function hsvToColorName(h, s, v) {
+            // Amabang batas
+            const SATURATION_THRESHOLD = 20; // Jika S di bawah ini, dianggap Abu-abu/Netral
+            const VALUE_BLACK_THRESHOLD = 15; // Jika V di bawah ini, dianggap Hitam
+            const VALUE_WHITE_THRESHOLD = 85; // Jika V di atas ini, dianggap Putih
+
+            // 1. Identifikasi Netral (Hitam, Putih, Abu-abu)
+            if (v < VALUE_BLACK_THRESHOLD) return "Hitam";
+            if (v > VALUE_WHITE_THRESHOLD && s < SATURATION_THRESHOLD) return "Putih";
+            if (s < SATURATION_THRESHOLD) return "Abu-abu";
+
+            // 2. Identifikasi Warna (Berdasarkan Hue)
+            if (h >= 345 || h < 15) return "Merah";
+            if (h >= 15 && h < 45) return "Oranye";
+            if (h >= 45 && h < 75) return "Kuning";
+            if (h >= 75 && h < 165) return "Hijau";
+            if (h >= 165 && h < 255) return "Biru";
+            if (h >= 255 && h < 345) return "Ungu/Magenta";
+
+            return "Warna Cerah";
+        }
+
+        function averageColorInBox(box){
+            const [x,y,w,h] = box.map(v=>Math.max(0,Math.floor(v)));
+            if(w <= 0 || h <= 0 || w > overlay.width || h > overlay.height) return null;
+            try{
+                const img = ctx.getImageData(x,y,w,h);
+                const d = img.data; let r=0,g=0,b=0,cnt=0;
+                for(let i=0;i<d.length;i+=4){ r+=d[i]; g+=d[i+1]; b+=d[i+2]; cnt++; }
+                if(cnt === 0) return null;
+                r=Math.round(r/cnt); g=Math.round(g/cnt); b=Math.round(b/cnt);
+                return {r,g,b};
+            }catch(e){ return null; }
+        }
+
+        // --- Fungsi Utilitas Jarak ---
+
+        function estimateDistance(realWidthCm, perceivedPx){
+            if(!calibration.focalLength) return null;
+            // Rumus: distance (cm) = (realWidthCm * focalLength) / perceivedPx
+            return (realWidthCm * calibration.focalLength) / perceivedPx;
+        }
+
+        async function calibrate(){
+            const knownWidth = parseFloat(knownWidthInput.value);
+            const knownDistance = parseFloat(knownDistanceInput.value);
+            const cls = classForCalibration.value;
+            if(!knownWidth || !knownDistance){ alert('Masukkan lebar dan jarak diketahui (cm) dengan benar.'); return; }
+            if(!model || !stream){ alert('Pastikan kamera sudah di-Start dan model sudah dimuat.'); return; }
+
+            const predictions = await model.detect(video);
+            const found = predictions.find(p => p.class.toLowerCase()===cls.toLowerCase());
+            
+            if(!found){ alert(`Objek '${cls}' tidak ditemukan. Pastikan objek berada di frame dan terdeteksi.`); return; }
+            
+            const perceivedPx = found.bbox[2]; 
+            
+            if (perceivedPx === 0) { alert('Lebar objek yang terdeteksi adalah 0 piksel. Coba lagi.'); return; }
+            
+            calibration.focalLength = (perceivedPx * knownDistance) / knownWidth;
+            calibration.realWidthCm = knownWidth;
+            calibration.calibratedClass = cls;
+            
+            focalEl.textContent = calibration.focalLength.toFixed(2);
+            alert(`Kalibrasi selesai: Focal Length ${calibration.focalLength.toFixed(2)} disimpan (session).`);
+        }
+        
+        // --- Main Detection Loop ---
 
         function drawBox(box, label, score, color){
             const [x,y,w,h] = box;
             // Tampilan bounding box
             ctx.lineWidth = 2;
-            ctx.strokeStyle = color || '#06b6d4'; // Menggunakan warna accent2 (biru)
+            ctx.strokeStyle = color || '#06b6d4'; 
             if(showBoxes.checked) ctx.strokeRect(x,y,w,h);
             
             if(showLabels.checked){
@@ -390,126 +479,19 @@
             }
         }
 
-        function averageColorInBox(box){
-            const [x,y,w,h] = box.map(v=>Math.max(0,Math.floor(v)));
-            // Pastikan dimensi valid
-            if(w <= 0 || h <= 0 || w > overlay.width || h > overlay.height) return null;
-            try{
-                // Ambil data gambar dari canvas, bukan video
-                const img = ctx.getImageData(x,y,w,h);
-                const d = img.data; let r=0,g=0,b=0,cnt=0;
-                for(let i=0;i<d.length;i+=4){ r+=d[i]; g+=d[i+1]; b+=d[i+2]; cnt++; }
-                if(cnt === 0) return null;
-                r=Math.round(r/cnt); g=Math.round(g/cnt); b=Math.round(b/cnt);
-                return {r,g,b};
-            }catch(e){
-                console.error("Error saat mengambil data warna:", e);
-                return null;
-            }
-        }
-
-        /**
-         * Konversi nilai RGB menjadi nama warna deskriptif.
-         * Ini adalah fungsi sederhana dan dapat diperluas untuk lebih banyak warna.
-         */
-        function rgbToColorName(r, g, b) {
-            // Jarak Euclidean ke warna dasar (hanya contoh sederhana)
-            const colors = [
-                { name: "Merah", r: 255, g: 0, b: 0 },
-                { name: "Hijau", r: 0, g: 255, b: 0 },
-                { name: "Biru", r: 0, g: 0, b: 255 },
-                { name: "Kuning", r: 255, g: 255, b: 0 },
-                { name: "Cyan", r: 0, g: 255, b: 255 },
-                { name: "Magenta", r: 255, g: 0, b: 255 },
-                { name: "Putih", r: 255, g: 255, b: 255 },
-                { name: "Hitam", r: 0, g: 0, b: 0 },
-                { name: "Abu-abu", r: 128, g: 128, b: 128 },
-                { name: "Oranye", r: 255, g: 165, b: 0 },
-                { name: "Ungu", r: 128, g: 0, b: 128 },
-            ];
-
-            let minDistance = Infinity;
-            let closestColor = "Tidak Dikenal";
-
-            for (const color of colors) {
-                const dr = r - color.r;
-                const dg = g - color.g;
-                const db = b - color.b;
-                // Menggunakan jarak kuadrat (menghindari operasi sqrt)
-                const distance = dr * dr + dg * dg + db * db;
-
-                if (distance < minDistance) {
-                    minDistance = distance;
-                    closestColor = color.name;
-                }
-            }
-
-            // Batas sederhana untuk menghindari klasifikasi warna yang terlalu gelap/terang sebagai warna murni
-            if (r < 50 && g < 50 && b < 50) return "Hitam";
-            if (r > 200 && g > 200 && b > 200) return "Putih";
-            
-            // Jika jaraknya terlalu jauh, mungkin itu adalah nuansa yang kompleks
-            // Namun, untuk demo sederhana ini, kita hanya mengembalikan warna terdekat.
-            return closestColor;
-        }
-
-
-        function estimateDistance(realWidthCm, perceivedPx){
-            if(!calibration.focalLength) return null;
-            // Rumus: distance (cm) = (realWidthCm * focalLength) / perceivedPx
-            return (realWidthCm * calibration.focalLength) / perceivedPx;
-        }
-
-        // Calibrate focal length using known object
-        async function calibrate(){
-            const knownWidth = parseFloat(knownWidthInput.value);
-            const knownDistance = parseFloat(knownDistanceInput.value);
-            const cls = classForCalibration.value;
-            if(!knownWidth || !knownDistance){ alert('Masukkan lebar dan jarak diketahui (cm) dengan benar.'); return; }
-            
-            // Pastikan model sudah dimuat dan kamera aktif
-            if(!model || !stream){
-                alert('Pastikan kamera sudah di-Start dan model sudah dimuat.');
-                return;
-            }
-
-            // run single detection and find first matching class
-            const predictions = await model.detect(video);
-            const found = predictions.find(p => p.class.toLowerCase()===cls.toLowerCase());
-            
-            if(!found){ alert(`Objek '${cls}' tidak ditemukan. Pastikan objek berada di frame dan terdeteksi.`); return; }
-            
-            const perceivedPx = found.bbox[2]; // bbox width (lebar dalam piksel)
-            
-            if (perceivedPx === 0) {
-                alert('Lebar objek yang terdeteksi adalah 0 piksel. Coba lagi.');
-                return;
-            }
-            
-            calibration.focalLength = (perceivedPx * knownDistance) / knownWidth;
-            calibration.realWidthCm = knownWidth;
-            calibration.calibratedClass = cls;
-            
-            focalEl.textContent = calibration.focalLength.toFixed(2);
-            alert(`Kalibrasi selesai: Focal Length ${calibration.focalLength.toFixed(2)} disimpan (session).`);
-        }
-
         async function runDetection(){
-            if(!model) return;
-            if(!running) return;
+            if(!model || !running) return;
             rafId = requestAnimationFrame(runDetection);
             frameCount++;
             const skip = parseInt(skipFrames.value || '1',10);
             
-            // Hanya proses deteksi jika frameCount mencapai nilai skip
             if(frameCount % skip !== 0) return;
 
-            // Gambar frame saat ini ke overlay (PENTING untuk sampling warna)
+            // Gambar frame saat ini ke overlay (wajib untuk sampling warna)
             ctx.clearRect(0,0,overlay.width,overlay.height);
             ctx.drawImage(video,0,0,overlay.width,overlay.height);
 
             const t0 = performance.now();
-            // Panggil deteksi menggunakan tensor dari video
             const predictions = await model.detect(video);
             const t1 = performance.now();
 
@@ -523,22 +505,25 @@
                 lastFpsTime=performance.now(); 
             }
 
-            let estDistCurrent = '—'; // Untuk menampilkan jarak estimasi di badge
+            let estDistCurrent = '—'; 
 
             // gambar kotak dan hitung warna + jarak
             for(const p of predictions){
                 const box = p.bbox; // [x,y,w,h]
-                ctx.font = '14px sans-serif'; // Menggunakan font sans-serif
+                ctx.font = '14px sans-serif'; 
                 
-                // --- Deteksi Warna ---
-                const color = averageColorInBox(box);
+                // --- Deteksi Warna (HSV) ---
+                const colorRGB = averageColorInBox(box);
                 let colorName = 'N/A';
                 
-                if(color){
-                    colorName = rgbToColorName(color.r, color.g, color.b);
+                if(colorRGB){
+                    const hsv = rgbToHsv(colorRGB.r, colorRGB.g, colorRGB.b);
+                    colorName = hsvToColorName(hsv.h, hsv.s, hsv.v);
+                    
                     // Tampilkan Nama Warna
                     const colorText = `${colorName}`;
-                    const colorX = box[0] + box[2] - ctx.measureText(colorText).width - 14;
+                    // Hitung posisi teks warna (kanan atas kotak)
+                    const colorX = box[0] + box[2] - ctx.measureText(colorText).width - 14; 
                     const colorY = box[1] + 20;
 
                     // Background warna
@@ -551,13 +536,13 @@
                 }
 
                 // Gambar kotak deteksi
-                drawBox(box, p.class, p.score, '#21a366'); // Menggunakan warna hijau/teal
+                drawBox(box, p.class, p.score, '#21a366'); 
 
                 // --- Estimasi Jarak ---
                 if(calibration.focalLength && calibration.realWidthCm && p.class.toLowerCase() === calibration.calibratedClass.toLowerCase()){
                     const est = estimateDistance(calibration.realWidthCm, box[2]);
                     if(est){
-                        const txt = `${est.toFixed(1)} cm`; // Akurasi 1 desimal
+                        const txt = `${est.toFixed(1)} cm`; 
                         
                         // Background jarak
                         ctx.fillStyle = 'rgba(0,0,0,0.6)';
@@ -567,18 +552,16 @@
                         ctx.fillStyle = '#fff';
                         ctx.fillText(txt, box[0]+4, box[1]+box[3]+18);
                         
-                        estDistCurrent = txt; // Update untuk badge
+                        estDistCurrent = txt; 
                     }
                 }
             }
             
-            // Update badge Est. Jarak
             estDistEl.textContent = estDistCurrent;
         }
 
-        // Events
+        // --- Events & Init ---
         startBtn.addEventListener('click', async ()=>{
-            // Stop dulu jika sedang berjalan
             if(running) stopCamera(); 
             
             await listCameras();
@@ -596,19 +579,14 @@
         stopBtn.addEventListener('click', ()=>{ stopCamera(); modelStatus.textContent='Dihentikan'; });
         calibrateBtn.addEventListener('click', calibrate);
 
-        // init
         (async ()=>{
             await listCameras();
             modelStatus.textContent = 'Siap';
-            // Coba memuat model di awal untuk mempersingkat waktu start
             loadModel(); 
-            // quick attempt to autostart if permission previously granted
             try{ const p = await navigator.permissions.query({name:'camera'}); if(p.state==='granted') startBtn.click(); }catch(e){}
         })();
 
-        // handle resize (perlu diubah karena resolusi video fixed 640x480)
         window.addEventListener('resize', ()=>{ 
-            // Jika video sudah aktif, pastikan overlay tetap sesuai resolusi video
             if(video.videoWidth){ 
                 overlay.width = video.videoWidth; 
                 overlay.height = video.videoHeight; 
