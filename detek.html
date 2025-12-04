@@ -3,38 +3,39 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Object Detection (TensorFlow.js + COCO-SSD) — Run on GitHub Pages</title>
+  <title>Object Detection (TensorFlow.js + COCO-SSD) — No Mirror</title>
   <style>
-    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin: 16px; background:#f6f8fa; color:#111;}
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto; margin: 16px; background:#f6f8fa; color:#111;}
     header { display:flex; gap:12px; align-items:center; margin-bottom:12px; }
     h1 { font-size:18px; margin:0; }
     .controls { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
-    select, button, input[type="number"] { padding:6px 8px; border-radius:6px; border:1px solid #ccc; background:white; }
+    select, button, input[type="number"] {
+      padding:6px 8px; border-radius:6px; border:1px solid #ccc; background:white;
+    }
     #videoContainer { position:relative; display:inline-block; border-radius:8px; overflow:hidden; background:#000; }
-    canvas { display:block; }
-    #log { margin-top:8px; font-size:13px; color:#444; max-width:100%; white-space:pre-wrap; background:#fff; padding:8px; border-radius:6px; border:1px solid #e3e6ea; }
+    canvas { display:block; position:absolute; left:0; top:0; }
+    #log { margin-top:8px; font-size:13px; color:#444; white-space:pre-wrap; background:#fff;
+      padding:8px; border-radius:6px; border:1px solid #e3e6ea; }
     .small { font-size:13px; color:#555; }
     footer { margin-top:12px; font-size:13px; color:#666; }
   </style>
 
-  <!-- TensorFlow.js and coco-ssd from CDN -->
+  <!-- TensorFlow.js + COCO-SSD -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
 </head>
 <body>
   <header>
     <h1>Object Detection (TensorFlow.js · COCO-SSD)</h1>
-    <div class="small">Versi web — siap dijalankan di GitHub Pages</div>
+    <div class="small">Tanpa mirror — kamera & tulisan normal</div>
   </header>
 
-  <div class="controls" role="region" aria-label="Controls">
-    <label>
-      Kamera:
+  <div class="controls">
+    <label>Kamera:
       <select id="videoSelect"></select>
     </label>
 
-    <label>
-      Resolusi:
+    <label>Resolusi:
       <select id="resolution">
         <option value="640x480">640×480</option>
         <option value="480x360">480×360</option>
@@ -42,9 +43,8 @@
       </select>
     </label>
 
-    <label>
-      Confidence ≥
-      <input id="minScore" type="number" value="0.5" step="0.05" min="0" max="1" />
+    <label>Confidence ≥
+      <input id="minScore" type="number" value="0.5" step="0.05" min="0" max="1"/>
     </label>
 
     <button id="startBtn">Start</button>
@@ -53,14 +53,14 @@
   </div>
 
   <div id="videoContainer">
-    <video id="video" autoplay playsinline muted style="transform:scaleX(-1)"></video>
+    <video id="video" autoplay playsinline muted></video>
     <canvas id="overlay"></canvas>
   </div>
 
-  <div id="log">Status: memuat model COCO-SSD…</div>
+  <div id="log">Status: Memuat model…</div>
 
   <footer>
-    Tips: berikan izin kamera saat diminta. Untuk menjalankan di GitHub Pages, buat repo baru dan letakkan file ini sebagai <code>index.html</code>, lalu aktifkan Pages.
+    Simpan file ini sebagai <code>index.html</code> lalu upload ke GitHub Pages.
   </footer>
 
 <script>
@@ -81,21 +81,18 @@
   let rafId = null;
   let detecting = false;
 
-  // Utility log
-  function info(...t) { log.textContent = 'Status: ' + t.join(' '); }
+  const info = (...t) => log.textContent = 'Status: ' + t.join(' ');
 
   // Load model
   try {
-    info('Memuat model COCO-SSD... (akan memakan beberapa saat)');
-    model = await cocoSsd.load(); // global dari script CDN
+    info('Memuat model COCO-SSD...');
+    model = await cocoSsd.load();
     info('Model siap — pilih kamera lalu klik Start');
   } catch (e) {
-    console.error(e);
-    info('Gagal memuat model:', e.message || e);
+    info('Gagal memuat model: ' + e);
     return;
   }
 
-  // Enumerate video devices
   async function updateDeviceList() {
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
@@ -107,191 +104,122 @@
         opt.textContent = c.label || `Camera ${i+1}`;
         videoSelect.appendChild(opt);
       });
-      if (cams.length === 0) {
-        const opt = document.createElement('option');
-        opt.textContent = 'No camera found';
-        videoSelect.appendChild(opt);
-      }
     } catch (e) {
-      console.warn('enumerateDevices error', e);
+      console.error(e);
     }
   }
 
-  // Apply selected resolution
-  function parseResolution(value) {
-    const [w,h] = value.split('x').map(Number);
-    return { width: w, height: h };
-  }
+  const parseResolution = val => {
+    const [w,h] = val.split('x').map(Number);
+    return { width:w, height:h };
+  };
 
-  // Start camera and detection loop
   async function start() {
     const deviceId = videoSelect.value;
     const res = parseResolution(resolution.value);
+
     if (stream) stopStream();
+
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: { deviceId: deviceId ? { exact: deviceId } : undefined, ...res }
+        video: { deviceId: deviceId ? { exact: deviceId } : undefined, ...res },
+        audio: false
       });
       video.srcObject = stream;
       await video.play();
 
-      // set canvas size
-      canvas.width = video.videoWidth || res.width;
-      canvas.height = video.videoHeight || res.height;
-      canvas.style.width = (canvas.width) + 'px';
-      canvas.style.height = (canvas.height) + 'px';
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
 
       detecting = true;
       startBtn.disabled = true;
       stopBtn.disabled = false;
       snapshotBtn.disabled = false;
-      info('Kamera aktif — memulai deteksi...');
+
+      info('Kamera aktif — mendeteksi objek...');
 
       detectFrame();
     } catch (e) {
-      console.error('getUserMedia error', e);
-      info('Gagal mengakses kamera: ' + (e && e.message ? e.message : e));
+      info('Gagal membuka kamera: ' + e);
     }
   }
 
   function stopStream() {
-    if (stream) {
-      stream.getTracks().forEach(t => t.stop());
-      stream = null;
-    }
-    if (rafId) {
-      cancelAnimationFrame(rafId);
-      rafId = null;
-    }
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    stream = null;
     detecting = false;
+    cancelAnimationFrame(rafId);
+
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
     startBtn.disabled = false;
     stopBtn.disabled = true;
     snapshotBtn.disabled = true;
-    info('Kamera & deteksi dihentikan.');
-    // clear canvas
-    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    info('Kamera dihentikan.');
   }
 
-  stopBtn.addEventListener('click', stopStream);
+  stopBtn.onclick = stopStream;
+  startBtn.onclick = start;
 
-  startBtn.addEventListener('click', start);
-
-  snapshotBtn.addEventListener('click', () => {
-    // draw current overlay + video into an offscreen canvas and download
+  snapshotBtn.onclick = () => {
     const out = document.createElement('canvas');
     out.width = canvas.width;
     out.height = canvas.height;
     const octx = out.getContext('2d');
-    // video is mirrored horizontally; draw mirrored video to match overlay
-    octx.save();
-    octx.scale(-1,1);
-    octx.drawImage(video, -out.width, 0, out.width, out.height);
-    octx.restore();
+
+    // Draw normal (no mirror)
+    octx.drawImage(video, 0, 0, out.width, out.height);
     octx.drawImage(canvas, 0, 0);
+
     out.toBlob(blob => {
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = 'snapshot.png';
       a.click();
-      URL.revokeObjectURL(a.href);
-    }, 'image/png');
-  });
+    });
+  };
 
   async function detectFrame() {
     if (!detecting) return;
-    if (video.readyState < 2) { // HAVE_CURRENT_DATA
-      rafId = requestAnimationFrame(detectFrame);
-      return;
-    }
 
-    // run detection on the video element (mirrored)
-    try {
-      const predictions = await model.detect(video);
-      drawPredictions(predictions);
-    } catch (e) {
-      console.warn('model.detect error', e);
+    if (video.readyState >= 2) {
+      const preds = await model.detect(video);
+      drawPredictions(preds);
     }
-
     rafId = requestAnimationFrame(detectFrame);
   }
 
-  function drawPredictions(predictions) {
-    const minScore = parseFloat(minScoreEl.value) || 0.5;
-
-    // adjust canvas size if video changed
-    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-    }
-
+  function drawPredictions(preds) {
     ctx.clearRect(0,0,canvas.width,canvas.height);
+    const minScore = parseFloat(minScoreEl.value);
 
-    // mirror so boxes match video (video is mirrored with CSS transform)
-    ctx.save();
-    ctx.scale(-1,1);
-    ctx.translate(-canvas.width,0);
+    preds.forEach(p => {
+      if (p.score < minScore) return;
 
-    predictions.forEach(pred => {
-      if (pred.score < minScore) return;
-      const [x,y,width,height] = pred.bbox;
+      const [x,y,w,h] = p.bbox;
 
-      // draw box
-      ctx.lineWidth = Math.max(2, Math.round(canvas.width/320));
-      ctx.strokeStyle = '#00FF00';
-      ctx.fillStyle = 'rgba(0,255,0,0.15)';
-      ctx.strokeRect(x, y, width, height);
-      ctx.fillRect(x, y, width, height);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#00FF00";
+      ctx.fillStyle = "rgba(0,255,0,0.15)";
+      ctx.strokeRect(x,y,w,h);
+      ctx.fillRect(x,y,w,h);
 
-      // label
-      const label = `${pred.class} ${(pred.score*100).toFixed(1)}%`;
-      ctx.font = `${12 + Math.round(canvas.width/320)}px sans-serif`;
-      const textWidth = ctx.measureText(label).width;
-      const pad = 6;
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      ctx.fillRect(x, Math.max(0, y - 22), textWidth + pad, 20);
-      ctx.fillStyle = '#fff';
-      ctx.fillText(label, x + 4, Math.max(12, y - 8));
+      const label = `${p.class} ${(p.score*100).toFixed(1)}%`;
+
+      ctx.font = "16px sans-serif";
+      const tw = ctx.measureText(label).width;
+
+      ctx.fillStyle = "rgba(0,0,0,0.7)";
+      ctx.fillRect(x, y-24, tw+8, 20);
+
+      ctx.fillStyle = "#fff";
+      ctx.fillText(label, x+4, y-10);
     });
-
-    ctx.restore();
   }
 
-  // refresh devices when permission granted or on devicechange
   navigator.mediaDevices.addEventListener('devicechange', updateDeviceList);
-
-  // initial device list (may be empty until permission given)
   await updateDeviceList();
-
-  // If no label (browser prevents showing device labels before permission), try to prompt user:
-  videoSelect.addEventListener('change', async () => {
-    // nothing special — user selected a camera
-  });
-
-  // helpful fallback: if devices empty, try to prompt the user to allow camera via a temporary getUserMedia
-  async function ensurePermissionsThenList() {
-    try {
-      // request minimal permission with default camera (may prompt)
-      const tmp = await navigator.mediaDevices.getUserMedia({video:true});
-      tmp.getTracks().forEach(t => t.stop());
-    } catch (e) {
-      // ignore — user may deny; device labels will remain unavailable
-    }
-    await updateDeviceList();
-  }
-
-  // Run ensurePermissionsThenList to allow device labels on first load (no waiting for user)
-  ensurePermissionsThenList();
-
-  // Provide keyboard shortcut 's' to start/stop
-  window.addEventListener('keydown', (ev) => {
-    if (ev.key === 's') {
-      if (detecting) stopStream(); else start();
-    }
-  });
-
-  // Clean up on unload
-  window.addEventListener('beforeunload', stopStream);
 
 })();
 </script>
