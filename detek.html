@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Object Detection TensorFlow.js — GitHub Pages Ready</title>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;background:#f5f6f7;margin:0;padding:16px}
+    h2{margin-top:0}
+    .container{display:grid;grid-template-columns:1fr 520px;gap:16px}
+    iframe{width:100%;height:600px;border-radius:6px;border:1px solid #ccc}
+    .card{background:#fff;padding:12px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.1)}
+    #canvas{width:100%;background:#222;border-radius:6px}
+    .controls button,input{margin:4px}
+    .small{font-size:13px;color:#555}
+    @media(max-width:1000px){.container{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+
+<h2>TensorFlow.js Object Detection — Single File (GitHub Ready)</h2>
+<p class="small">Halaman asli: disematkan dari <a href="https://sismadi.github.io/disertasi/p1/" target="_blank">link ini</a>. Bagian kanan adalah deteksi objek COCO-SSD berbasis TensorFlow.js.</p>
+
+<div class="container">
+  <div class="card">
+    <h3>Halaman Asli (Iframe)</h3>
+    <iframe src="https://sismadi.github.io/disertasi/p1/"></iframe>
+  </div>
+
+  <div class="card">
+    <h3>Deteksi Objek TensorFlow.js (COCO-SSD)</h3>
+
+    <div class="controls">
+      <input type="file" id="upload" accept="image/*">
+      <button id="openCam">Buka Kamera</button>
+      <button id="snap" disabled>Snap</button>
+      <button id="detect" disabled>Deteksi</button>
+      <button id="stopCam" disabled>Stop Cam</button>
+    </div>
+
+    <canvas id="canvas" width="640" height="480"></canvas>
+    <div id="result" class="small"></div>
+  </div>
+</div>
+
+
+<script type="module">
+  import * as tf from "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0/dist/tf.min.js";
+  import * as cocoSsd from "https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.esm.js";
+
+  const upload = document.getElementById("upload");
+  const openCam = document.getElementById("openCam");
+  const snap = document.getElementById("snap");
+  const detectBtn = document.getElementById("detect");
+  const stopCam = document.getElementById("stopCam");
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+  const result = document.getElementById("result");
+
+  let model = null;
+  let videoStream = null;
+  let videoEl = null;
+
+  async function loadModel(){
+    result.innerText = "Memuat model COCO-SSD...";
+    model = await cocoSsd.load();
+    detectBtn.disabled = false;
+    result.innerText = "Model siap. Upload gambar atau aktifkan kamera.";
+  }
+  loadModel();
+
+  upload.addEventListener("change", e => {
+    const file = e.target.files[0];
+    if(!file) return;
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      ctx.drawImage(img,0,0,canvas.width,canvas.height);
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+  });
+
+  openCam.addEventListener("click", async ()=>{
+    if(videoStream) return;
+    try{
+      videoStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:false });
+      videoEl = document.createElement("video");
+      videoEl.srcObject = videoStream;
+      videoEl.autoplay = true;
+      await videoEl.play();
+      snap.disabled = false;
+      stopCam.disabled = false;
+      result.innerText = "Kamera aktif.";
+    }catch(e){ result.innerText = "Tidak bisa buka kamera: " + e.message; }
+  });
+
+  snap.addEventListener("click", ()=>{
+    if(!videoEl) return;
+    ctx.drawImage(videoEl,0,0,canvas.width,canvas.height);
+    result.innerText = "Frame diambil. Klik Deteksi.";
+  });
+
+  detectBtn.addEventListener("click", async ()=>{
+    if(!model){ result.innerText = "Model belum siap."; return; }
+
+    result.innerText = "Mendeteksi objek...";
+
+    const imgTensor = tf.browser.fromPixels(canvas);
+    const predictions = await model.detect(imgTensor);
+    imgTensor.dispose();
+
+    ctx.lineWidth = 2;
+    ctx.font = "16px Arial";
+
+    predictions.forEach(p => {
+      const [x,y,w,h] = p.bbox;
+      ctx.strokeStyle = "yellow";
+      ctx.fillStyle = "yellow";
+      ctx.strokeRect(x,y,w,h);
+      ctx.fillText(`${p.class} ${(p.score*100).toFixed(1)}%`, x, y>10?y-5:10);
+    });
+
+    result.innerHTML = "<b>Deteksi:</b><br>" + predictions.map(p=>`${p.class} ${(p.score*100).toFixed(1)}%`).join("<br>");
+  });
+
+  stopCam.addEventListener("click", ()=>{
+    if(videoStream){ videoStream.getTracks().forEach(t=>t.stop()); }
+    videoStream = null;
+    videoEl = null;
+    snap.disabled = true;
+    stopCam.disabled = true;
+    result.innerText = "Kamera dimatikan.";
+  });
+</script>
+
+</body>
+</html>
