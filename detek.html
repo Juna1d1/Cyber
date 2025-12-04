@@ -2,129 +2,201 @@
 <html lang="id">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Object Detection (TensorFlow.js + COCO-SSD) — No Mirror</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Object Detection — TensorFlow.js COCO-SSD</title>
+
+  <!-- ====== STYLE ====== -->
   <style>
-    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto; margin: 16px; background:#f6f8fa; color:#111;}
-    header { display:flex; gap:12px; align-items:center; margin-bottom:12px; }
-    h1 { font-size:18px; margin:0; }
-    .controls { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
-    select, button, input[type="number"] {
-      padding:6px 8px; border-radius:6px; border:1px solid #ccc; background:white;
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(135deg, #1e1e2f, #2a2d45);
+      color: #eee;
+      min-height: 100vh;
+      padding: 20px;
     }
-    #videoContainer { position:relative; display:inline-block; border-radius:8px; overflow:hidden; background:#000; }
-    canvas { display:block; position:absolute; left:0; top:0; }
-    #log { margin-top:8px; font-size:13px; color:#444; white-space:pre-wrap; background:#fff;
-      padding:8px; border-radius:6px; border:1px solid #e3e6ea; }
-    .small { font-size:13px; color:#555; }
-    footer { margin-top:12px; font-size:13px; color:#666; }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 10px;
+      font-size: 26px;
+      color: #7df3ff;
+      text-shadow: 0 0 10px rgba(125,243,255,0.5);
+    }
+
+    .card {
+      max-width: 900px;
+      margin: auto;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.12);
+      padding: 20px;
+      border-radius: 16px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 0 20px rgba(0,0,0,0.4);
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 18px;
+      justify-content: center;
+    }
+
+    select, button, input[type="number"] {
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: none;
+      outline: none;
+      background: rgba(255,255,255,0.15);
+      color: #fff;
+      font-size: 14px;
+      backdrop-filter: blur(4px);
+    }
+    button {
+      cursor: pointer;
+      background: #00d4ff;
+      color: #000;
+      font-weight: bold;
+      transition: 0.2s;
+    }
+    button:hover {
+      background: #7df3ff;
+    }
+    button:disabled {
+      background: gray;
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    #videoContainer {
+      position: relative;
+      width: 100%;
+      max-width: 900px;
+      margin: auto;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 0 25px rgba(0,0,0,0.6);
+    }
+
+    video, canvas {
+      width: 100%;
+      display: block;
+    }
+
+    #log {
+      margin-top: 10px;
+      text-align: center;
+      padding: 10px;
+      background: rgba(0,0,0,0.3);
+      border-radius: 10px;
+      font-size: 14px;
+      color: #b7ffb7;
+    }
   </style>
 
-  <!-- TensorFlow.js + COCO-SSD -->
+  <!-- ====== TENSORFLOW.JS & COCO-SSD ====== -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2"></script>
 </head>
+
 <body>
-  <header>
-    <h1>Object Detection (TensorFlow.js · COCO-SSD)</h1>
-    <div class="small">Tanpa mirror — kamera & tulisan normal</div>
-  </header>
 
-  <div class="controls">
-    <label>Kamera:
-      <select id="videoSelect"></select>
-    </label>
+  <h1>Real-Time Object Detection</h1>
 
-    <label>Resolusi:
-      <select id="resolution">
-        <option value="640x480">640×480</option>
-        <option value="480x360">480×360</option>
-        <option value="320x240">320×240</option>
-      </select>
-    </label>
+  <div class="card">
+    <div class="controls">
+      <label>
+        <select id="videoSelect"></select>
+      </label>
 
-    <label>Confidence ≥
-      <input id="minScore" type="number" value="0.5" step="0.05" min="0" max="1"/>
-    </label>
+      <label>
+        <select id="resolution">
+          <option value="640x480">640×480</option>
+          <option value="480x360">480×360</option>
+          <option value="320x240">320×240</option>
+        </select>
+      </label>
 
-    <button id="startBtn">Start</button>
-    <button id="stopBtn" disabled>Stop</button>
-    <button id="snapshotBtn" disabled>Download Snapshot</button>
+      <label>
+        Confidence ≥
+        <input id="minScore" type="number" value="0.5" step="0.05" min="0" max="1">
+      </label>
+
+      <button id="startBtn">Start</button>
+      <button id="stopBtn" disabled>Stop</button>
+      <button id="snapshotBtn" disabled>Snapshot</button>
+    </div>
+
+    <div id="videoContainer">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="overlay"></canvas>
+    </div>
+
+    <div id="log">Status: Memuat model...</div>
   </div>
-
-  <div id="videoContainer">
-    <video id="video" autoplay playsinline muted></video>
-    <canvas id="overlay"></canvas>
-  </div>
-
-  <div id="log">Status: Memuat model…</div>
-
-  <footer>
-    Simpan file ini sebagai <code>index.html</code> lalu upload ke GitHub Pages.
-  </footer>
 
 <script>
 (async () => {
-  const video = document.getElementById('video');
-  const canvas = document.getElementById('overlay');
-  const ctx = canvas.getContext('2d');
-  const videoSelect = document.getElementById('videoSelect');
-  const resolution = document.getElementById('resolution');
-  const minScoreEl = document.getElementById('minScore');
-  const startBtn = document.getElementById('startBtn');
-  const stopBtn = document.getElementById('stopBtn');
-  const snapshotBtn = document.getElementById('snapshotBtn');
-  const log = document.getElementById('log');
+  const video = document.getElementById("video");
+  const canvas = document.getElementById("overlay");
+  const ctx = canvas.getContext("2d");
 
-  let stream = null;
+  const videoSelect = document.getElementById("videoSelect");
+  const resolution = document.getElementById("resolution");
+  const minScoreEl = document.getElementById("minScore");
+  const startBtn = document.getElementById("startBtn");
+  const stopBtn = document.getElementById("stopBtn");
+  const snapshotBtn = document.getElementById("snapshotBtn");
+  const log = document.getElementById("log");
+
   let model = null;
-  let rafId = null;
+  let stream = null;
   let detecting = false;
+  let raf = null;
 
-  const info = (...t) => log.textContent = 'Status: ' + t.join(' ');
-
-  // Load model
-  try {
-    info('Memuat model COCO-SSD...');
-    model = await cocoSsd.load();
-    info('Model siap — pilih kamera lalu klik Start');
-  } catch (e) {
-    info('Gagal memuat model: ' + e);
-    return;
+  function info(msg) {
+    log.textContent = "Status: " + msg;
   }
 
-  async function updateDeviceList() {
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const cams = devices.filter(d => d.kind === 'videoinput');
-      videoSelect.innerHTML = '';
-      cams.forEach((c, i) => {
-        const opt = document.createElement('option');
-        opt.value = c.deviceId;
-        opt.textContent = c.label || `Camera ${i+1}`;
-        videoSelect.appendChild(opt);
-      });
-    } catch (e) {
-      console.error(e);
+  info("Memuat model COCO-SSD...");
+  model = await cocoSsd.load();
+  info("Model siap — pilih kamera & tekan Start");
+
+  // ----- List Kamera -----
+  async function updateCameraList() {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const cams = devices.filter(d => d.kind === "videoinput");
+
+    videoSelect.innerHTML = "";
+    cams.forEach((cam, i) => {
+      const opt = document.createElement("option");
+      opt.value = cam.deviceId;
+      opt.textContent = cam.label || `Kamera ${i+1}`;
+      videoSelect.appendChild(opt);
+    });
+
+    if (!cams.length) {
+      const opt = document.createElement("option");
+      opt.textContent = "Tidak ada kamera";
+      videoSelect.appendChild(opt);
     }
   }
+  await updateCameraList();
 
-  const parseResolution = val => {
-    const [w,h] = val.split('x').map(Number);
-    return { width:w, height:h };
-  };
-
+  // ----- START CAMERA -----
   async function start() {
     const deviceId = videoSelect.value;
-    const res = parseResolution(resolution.value);
+    const [w,h] = resolution.value.split("x").map(Number);
 
     if (stream) stopStream();
 
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        video: { deviceId: deviceId ? { exact: deviceId } : undefined, ...res },
+        video: { width: w, height: h, deviceId: deviceId ? { exact: deviceId } : undefined },
         audio: false
       });
+
       video.srcObject = stream;
       await video.play();
 
@@ -136,92 +208,90 @@
       stopBtn.disabled = false;
       snapshotBtn.disabled = false;
 
-      info('Kamera aktif — mendeteksi objek...');
-
+      info("Kamera aktif — mendeteksi objek...");
       detectFrame();
-    } catch (e) {
-      info('Gagal membuka kamera: ' + e);
+
+    } catch (err) {
+      info("Gagal mengakses kamera: " + err.message);
     }
   }
 
+  // ----- STOP CAMERA -----
   function stopStream() {
+    detecting = false;
     if (stream) stream.getTracks().forEach(t => t.stop());
     stream = null;
-    detecting = false;
-    cancelAnimationFrame(rafId);
+
+    if (raf) cancelAnimationFrame(raf);
 
     ctx.clearRect(0,0,canvas.width,canvas.height);
-
     startBtn.disabled = false;
     stopBtn.disabled = true;
     snapshotBtn.disabled = true;
 
-    info('Kamera dihentikan.');
+    info("Kamera berhenti.");
   }
 
   stopBtn.onclick = stopStream;
   startBtn.onclick = start;
 
+  // ----- SNAPSHOT -----
   snapshotBtn.onclick = () => {
-    const out = document.createElement('canvas');
+    const out = document.createElement("canvas");
     out.width = canvas.width;
     out.height = canvas.height;
-    const octx = out.getContext('2d');
 
-    // Draw normal (no mirror)
+    const octx = out.getContext("2d");
     octx.drawImage(video, 0, 0, out.width, out.height);
     octx.drawImage(canvas, 0, 0);
 
-    out.toBlob(blob => {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'snapshot.png';
+    out.toBlob((b) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(b);
+      a.download = "snapshot.png";
       a.click();
     });
   };
 
+  // ----- DETECT LOOP -----
   async function detectFrame() {
     if (!detecting) return;
 
-    if (video.readyState >= 2) {
-      const preds = await model.detect(video);
-      drawPredictions(preds);
-    }
-    rafId = requestAnimationFrame(detectFrame);
+    const preds = await model.detect(video);
+    draw(preds);
+
+    raf = requestAnimationFrame(detectFrame);
   }
 
-  function drawPredictions(preds) {
+  // ----- DRAW BOUNDING BOX -----
+  function draw(preds) {
+    const ms = parseFloat(minScoreEl.value) || 0.5;
     ctx.clearRect(0,0,canvas.width,canvas.height);
-    const minScore = parseFloat(minScoreEl.value);
 
     preds.forEach(p => {
-      if (p.score < minScore) return;
+      if (p.score < ms) return;
 
       const [x,y,w,h] = p.bbox;
 
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = "#00FF00";
-      ctx.fillStyle = "rgba(0,255,0,0.15)";
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "#00ff99";
+      ctx.fillStyle = "rgba(0,255,150,0.18)";
+
       ctx.strokeRect(x,y,w,h);
       ctx.fillRect(x,y,w,h);
 
       const label = `${p.class} ${(p.score*100).toFixed(1)}%`;
 
-      ctx.font = "16px sans-serif";
-      const tw = ctx.measureText(label).width;
+      ctx.fillStyle = "#000";
+      ctx.fillRect(x, y - 20, ctx.measureText(label).width + 8, 20);
 
-      ctx.fillStyle = "rgba(0,0,0,0.7)";
-      ctx.fillRect(x, y-24, tw+8, 20);
-
-      ctx.fillStyle = "#fff";
-      ctx.fillText(label, x+4, y-10);
+      ctx.fillStyle = "#00ff99";
+      ctx.font = "14px Arial";
+      ctx.fillText(label, x + 4, y - 6);
     });
   }
-
-  navigator.mediaDevices.addEventListener('devicechange', updateDeviceList);
-  await updateDeviceList();
-
 })();
 </script>
+
 </body>
 </html>
