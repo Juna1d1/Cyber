@@ -1,342 +1,619 @@
 <!doctype html>
 <html lang="id">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Detector — Object + Color + Distance (TensorFlow.js)</title>
-  <style>
-    :root{
-      --bg:#0b0f19;
-      --card:#111827;
-      --accent:#3b82f6;
-      --accent2:#06b6d4;
-      --muted:#9ca3af;
-    }
-    body{
-      font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,Arial;
-      margin:0;
-      background:linear-gradient(180deg,#0b0f19 0%, #0f172a 100%);
-      color:#e5e7eb;
-    }
-    .wrap{max-width:1200px;margin:32px auto;padding:20px}
-    header{display:flex;gap:16px;align-items:center;margin-bottom:10px}
-    h1{margin:0;font-size:24px;font-weight:600;color:#ffffff}
-    .grid{display:grid;grid-template-columns:460px 1fr;gap:22px;margin-top:16px}
-    .card{background:rgba(255,255,255,0.05);padding:18px;border-radius:16px;backdrop-filter:blur(6px);box-shadow:0 8px 25px rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.08)}
-    video{border-radius:12px;display:block;width:100%;background:#000}
-    canvas{position:absolute;left:0;top:0;border-radius:12px}
-    .video-wrap{position:relative}
-    .controls{display:flex;flex-direction:column;gap:10px;margin-top:10px}
-    label{font-size:14px;color:var(--muted);font-weight:500}
-    input,select,button{
-      padding:10px 12px;
-      border-radius:10px;
-      border:1px solid rgba(255,255,255,0.12);
-      background:rgba(255,255,255,0.04);
-      color:#fff;
-      backdrop-filter:blur(4px);
-    }
-    button{
-      cursor:pointer;
-      border:1px solid var(--accent2);
-      background:var(--accent);
-      transition:0.2s;
-    }
-    button:hover{
-      background:var(--accent2);
-    }
-    .row{display:flex;gap:10px;align-items:center}
-    .small{font-size:13px;color:var(--muted)}
-    hr{border:none;border-top:1px solid rgba(255,255,255,0.08);margin:10px 0}
-    footer{margin-top:14px;font-size:12px;color:var(--muted)}
-    .stats{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px}
-    .badge{background:rgba(255,255,255,0.08);padding:8px 10px;border-radius:10px;font-size:13px}
-</style>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Detector — Object + Color + Distance (TensorFlow.js)</title>
+    <style>
+        /* Desain UI/UX yang Ditingkatkan */
+        :root {
+            --bg: #0d1117; /* Background gelap, terinspirasi dari GitHub/VS Code */
+            --card: #161b22;
+            --accent: #21a366; /* Warna aksen hijau/teal untuk kontras */
+            --accent-hover: #1e8e58;
+            --accent2: #58a6ff; /* Aksen sekunder biru cerah */
+            --muted: #8b949e;
+            --text: #c9d1d9;
+            --border: #30363d;
+        }
+        body {
+            font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+        .wrap {
+            max-width: 1280px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+        h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 700;
+            color: #ffffff;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: minmax(400px, 1fr) 400px;
+            gap: 24px;
+        }
+        @media (max-width: 1024px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        .card {
+            background: var(--card);
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--border);
+        }
+        .video-wrap {
+            position: relative;
+            aspect-ratio: 4/3; /* Asumsi 640x480 */
+        }
+        video, canvas {
+            border-radius: 8px;
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: #000;
+        }
+        canvas {
+            position: absolute;
+            left: 0;
+            top: 0;
+        }
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 16px;
+        }
+        label {
+            font-size: 14px;
+            color: var(--muted);
+            font-weight: 500;
+            display: block;
+            margin-bottom: 4px;
+        }
+        input:not([type="checkbox"]), select, button {
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--bg);
+            color: var(--text);
+            transition: border-color 0.2s;
+            font-size: 15px;
+        }
+        input:not([type="checkbox"]):focus, select:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(33, 163, 102, 0.4);
+        }
+        button {
+            cursor: pointer;
+            border: 1px solid var(--accent);
+            background: var(--accent);
+            color: #fff;
+            font-weight: 600;
+            transition: 0.2s;
+        }
+        button:hover {
+            background: var(--accent-hover);
+            border-color: var(--accent-hover);
+        }
+        .row {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end; /* Mengatur item agar rata bawah */
+        }
+        .row-item {
+            flex-grow: 1;
+        }
+        .small {
+            font-size: 13px;
+            color: var(--muted);
+        }
+        hr {
+            border: none;
+            border-top: 1px solid var(--border);
+            margin: 16px 0;
+        }
+        footer {
+            margin-top: 24px;
+            font-size: 13px;
+            color: var(--muted);
+            text-align: center;
+        }
+        .stats {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 16px;
+        }
+        .badge {
+            background: rgba(255, 255, 255, 0.08);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text);
+        }
+        .hint {
+            margin-top: 8px;
+            padding: 10px;
+            background: rgba(88, 166, 255, 0.1);
+            border-left: 3px solid var(--accent2);
+            border-radius: 0 4px 4px 0;
+        }
+        .flex-grow-1 {
+            flex-grow: 1;
+        }
+        .checkbox-row {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        /* Style untuk checkbox */
+        input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--accent);
+        }
+    </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <h1>Detector — Object + Color + Distance (TensorFlow.js)</h1>
-      <div style="margin-left:auto" class="small">Single-file HTML • Ready for GitHub Pages</div>
-    </header>
+    <div class="wrap">
+        <header>
+            <h1>🔬 Detector — Object + Color + Distance (TensorFlow.js)</h1>
+            <div class="small">Demo HTML Tunggal • Siap untuk GitHub Pages</div>
+        </header>
 
-    <div class="grid">
-      <div class="card">
-        <div class="video-wrap">
-          <video id="video" playsinline autoplay muted></video>
-          <canvas id="overlay"></canvas>
+        <div class="grid">
+            <div class="card">
+                <div class="video-wrap">
+                    <video id="video" playsinline autoplay muted></video>
+                    <canvas id="overlay"></canvas>
+                </div>
+
+                <div class="controls">
+                    <div class="row">
+                        <div class="row-item">
+                            <label for="cameraList">Kamera</label>
+                            <select id="cameraList" class="flex-grow-1"></select>
+                        </div>
+                        <button id="startBtn" style="flex-basis: 80px;">Start</button>
+                        <button id="stopBtn" style="flex-basis: 80px;">Stop</button>
+                    </div>
+
+                    <div class="row">
+                        <div class="row-item">
+                            <label for="modelSelect">Model</label>
+                            <select id="modelSelect">
+                                <option value="coco">COCO-SSD (direkomendasikan)</option>
+                            </select>
+                        </div>
+                        <div class="row-item" style="flex-grow: 0;">
+                            <label for="skipFrames" class="small">Proses setiap</label>
+                            <select id="skipFrames"><option>1</option><option>2</option><option>3</option><option>4</option></select>
+                        </div>
+                        <div class="checkbox-row row-item" style="flex-grow: 1;">
+                            <div class="checkbox-group">
+                                <input id="showBoxes" type="checkbox" checked />
+                                <label for="showBoxes" class="small">Kotak</label>
+                            </div>
+                            <div class="checkbox-group">
+                                <input id="showLabels" type="checkbox" checked />
+                                <label for="showLabels" class="small">Label</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr />
+
+                    <label>Kalibrasi Jarak</label>
+                    <div class="row">
+                        <div class="row-item">
+                            <input id="knownWidth" placeholder="Lebar Diketahui (cm) cth: 14" />
+                        </div>
+                        <div class="row-item">
+                            <input id="knownDistance" placeholder="Jarak Kalibrasi (cm) cth: 50" />
+                        </div>
+                        <div class="row-item" style="flex-grow: 0;">
+                             <select id="classForCalibration" style="width: 120px;">
+                                <option value="person">person</option>
+                                <option value="bottle">bottle</option>
+                                <option value="cell phone">cell phone</option>
+                                <option value="cup">cup</option>
+                            </select>
+                        </div>
+                        <button id="calibrateBtn" style="flex-basis: 90px;">Kalibrasi</button>
+                    </div>
+                    <p class="small hint">Instruksi: Posisikan objek dengan lebar X cm pada jarak Y cm di tengah frame, lalu klik Kalibrasi. Hanya perlu dilakukan sekali per kamera.</p>
+
+                    <hr />
+
+                    <div class="stats">
+                        <div class="badge">Status Model: <span id="modelStatus">—</span></div>
+                        <div class="badge">FPS: <span id="fps">—</span></div>
+                        <div class="badge">Deteksi Terakhir: <span id="lastDetect">—</span></div>
+                        <div class="badge">Focal Length: <span id="focal">—</span></div>
+                        <div class="badge">Est. Jarak: <span id="estDist">—</span></div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>💡 Cara Kerja</h3>
+                <p class="small">Demo satu file ini menggunakan TensorFlow.js (<code>coco-ssd</code>) untuk mendeteksi objek secara real-time dari kamera. Untuk setiap kotak pembatas yang terdeteksi, sistem mengambil sampel piksel untuk menghitung **warna dominan** (ditampilkan sebagai teks, cth: Merah) dan — jika sudah dikalibrasi — **memperkirakan jarak** menggunakan formula sederhana kamera lubang jarum.</p>
+
+                <hr/>
+
+                <h3>🚀 Export / Penggunaan</h3>
+                <ol class="small">
+                    <li>Simpan file ini sebagai <code>index.html</code> di root repo GitHub Anda.</li>
+                    <li>Aktifkan GitHub Pages pada repositori tersebut (Settings → Pages → pilih branch main).</li>
+                    <li>Buka URL yang dipublikasikan dan izinkan akses kamera.</li>
+                </ol>
+
+                <hr/>
+
+                <h3>Catatan & Tips</h3>
+                <ul class="small">
+                    <li>Kalibrasi bergantung pada kamera dan lensa Anda — lakukan kalibrasi ulang jika perangkat berubah.</li>
+                    <li>Estimasi jarak bersifat perkiraan — cocok untuk jarak relatif / tujuan demo.</li>
+                    <li>Jika model gagal dimuat, periksa akses jaringan / CDN (demo ini menggunakan CDN publik).</li>
+                </ul>
+            </div>
         </div>
 
-        <div style="margin-top:12px" class="controls">
-          <div class="row">
-            <label>Camera</label>
-            <select id="cameraList"></select>
-            <button id="startBtn">Start</button>
-            <button id="stopBtn">Stop</button>
-          </div>
-
-          <div class="row">
-            <label>Model</label>
-            <select id="modelSelect">
-              <option value="coco">COCO-SSD (recommended)</option>
-            </select>
-            <label class="small">Process every</label>
-            <select id="skipFrames"><option>1</option><option>2</option><option>3</option><option>4</option></select>
-          </div>
-
-          <div class="row">
-            <label class="small">Show boxes</label>
-            <input id="showBoxes" type="checkbox" checked />
-            <label class="small">Show labels</label>
-            <input id="showLabels" type="checkbox" checked />
-          </div>
-
-          <hr />
-
-          <label>Distance calibration</label>
-          <div class="row">
-            <input id="knownWidth" placeholder="Known width (cm) e.g. 14" />
-            <input id="knownDistance" placeholder="Distance used in calibration (cm) e.g. 50" />
-            <select id="classForCalibration"><option value="person">person</option><option value="bottle">bottle</option><option value="cell phone">cell phone</option><option value="cup">cup</option></select>
-            <button id="calibrateBtn">Calibrate</button>
-          </div>
-          <div class="small hint">Calibration: center a known object of width X cm at distance Y cm and click Calibrate. You only need to do this once per camera.</div>
-
-          <hr />
-
-          <div class="stats">
-            <div class="badge">Model status: <span id="modelStatus">—</span></div>
-            <div class="badge">FPS: <span id="fps">—</span></div>
-            <div class="badge">Last detection: <span id="lastDetect">—</span></div>
-            <div class="badge">Focal: <span id="focal">—</span></div>
-            <div class="badge">Estimated dist: <span id="estDist">—</span></div>
-          </div>
-
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>How it works</h3>
-        <p class="small">This single-file demo uses TensorFlow.js (<code>coco-ssd</code>) to detect objects in real-time from your camera. For each detected bounding box we sample the pixels to compute the dominant color and — if you've calibrated — estimate distance using a simple pinhole camera formula.</p>
-
-        <h3>Export / Usage</h3>
-        <ol class="small">
-          <li>Save this file as <code>index.html</code> in a GitHub repo's root.</li>
-          <li>Enable GitHub Pages on the repository (Settings → Pages → choose main branch).</li>
-          <li>Open the published URL and allow camera access.</li>
-        </ol>
-
-        <h3>Notes & tips</h3>
-        <ul class="small">
-          <li>Calibration depends on your camera and lens — re-calibrate if changing devices.</li>
-          <li>Distance estimate is approximate — good for relative distance / demo purposes.</li>
-          <li>If the model fails to load, check network / CDN access (this demo uses public CDNs).</li>
-        </ul>
-
-        <footer>Built with ❤️ using TensorFlow.js • Ready to run on GitHub Pages</footer>
-      </div>
+        <footer>© 2023 Built with ❤️ using TensorFlow.js • Ready to run on GitHub Pages</footer>
     </div>
-  </div>
 
-  <!-- Scripts: TensorFlow and COCO-SSD from CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0/dist/tf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
 
-  <script>
-    // Simple single-file detector + color + distance
-    const video = document.getElementById('video');
-    const overlay = document.getElementById('overlay');
-    const ctx = overlay.getContext('2d');
+    <script>
+        // Simple single-file detector + color + distance
+        const video = document.getElementById('video');
+        const overlay = document.getElementById('overlay');
+        const ctx = overlay.getContext('2d');
 
-    const cameraList = document.getElementById('cameraList');
-    const startBtn = document.getElementById('startBtn');
-    const stopBtn = document.getElementById('stopBtn');
-    const modelStatus = document.getElementById('modelStatus');
-    const fpsEl = document.getElementById('fps');
-    const lastDetect = document.getElementById('lastDetect');
-    const focalEl = document.getElementById('focal');
-    const estDistEl = document.getElementById('estDist');
+        const cameraList = document.getElementById('cameraList');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const modelStatus = document.getElementById('modelStatus');
+        const fpsEl = document.getElementById('fps');
+        const lastDetect = document.getElementById('lastDetect');
+        const focalEl = document.getElementById('focal');
+        const estDistEl = document.getElementById('estDist');
 
-    const knownWidthInput = document.getElementById('knownWidth');
-    const knownDistanceInput = document.getElementById('knownDistance');
-    const classForCalibration = document.getElementById('classForCalibration');
-    const calibrateBtn = document.getElementById('calibrateBtn');
+        const knownWidthInput = document.getElementById('knownWidth');
+        const knownDistanceInput = document.getElementById('knownDistance');
+        const classForCalibration = document.getElementById('classForCalibration');
+        const calibrateBtn = document.getElementById('calibrateBtn');
 
-    const skipFrames = document.getElementById('skipFrames');
-    const showBoxes = document.getElementById('showBoxes');
-    const showLabels = document.getElementById('showLabels');
+        const skipFrames = document.getElementById('skipFrames');
+        const showBoxes = document.getElementById('showBoxes');
+        const showLabels = document.getElementById('showLabels');
 
-    let model = null;
-    let stream = null;
-    let running = false;
-    let rafId = null;
-    let frameCount = 0;
-    let lastTime = performance.now();
-    let lastFpsTime = performance.now();
-    let framesForFps = 0;
+        let model = null;
+        let stream = null;
+        let running = false;
+        let rafId = null;
+        let frameCount = 0;
+        let lastTime = performance.now();
+        let lastFpsTime = performance.now();
+        let framesForFps = 0;
 
-    // Calibration storage (per session)
-    let calibration = { focalLength: null, realWidthCm: null, calibratedClass: null };
+        // Calibration storage (per session)
+        let calibration = { focalLength: null, realWidthCm: null, calibratedClass: null };
 
-    async function listCameras(){
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      cameraList.innerHTML = '';
-      devices.filter(d => d.kind === 'videoinput').forEach(d => {
-        const opt = document.createElement('option');
-        opt.value = d.deviceId;
-        opt.textContent = d.label || `Camera ${cameraList.length+1}`;
-        cameraList.appendChild(opt);
-      });
-    }
-
-    async function startCamera(){
-      if(stream) stopCamera();
-      const deviceId = cameraList.value || undefined;
-      stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: deviceId ? { exact: deviceId } : undefined, width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
-      video.srcObject = stream;
-      await video.play();
-      overlay.width = video.videoWidth;
-      overlay.height = video.videoHeight;
-    }
-
-    function stopCamera(){
-      if(stream){
-        stream.getTracks().forEach(t => t.stop());
-        stream = null;
-      }
-      if(rafId) cancelAnimationFrame(rafId);
-      running = false;
-    }
-
-    async function loadModel(){
-      modelStatus.textContent = 'loading...';
-      model = await cocoSsd.load();
-      modelStatus.textContent = 'ready';
-    }
-
-    function drawBox(box, label, score, color){
-      const [x,y,w,h] = box;
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = color || '#00ffff';
-      ctx.fillStyle = 'rgba(0,0,0,0.4)';
-      if(showBoxes.checked) ctx.strokeRect(x,y,w,h);
-      if(showLabels.checked){
-        const text = `${label} ${(score*100).toFixed(1)}%`;
-        ctx.fillRect(x, y-22, ctx.measureText(text).width+10, 20);
-        ctx.fillStyle = '#fff';
-        ctx.fillText(text, x+6, y-8);
-      }
-    }
-
-    function averageColorInBox(box){
-      const [x,y,w,h] = box.map(v=>Math.max(0,Math.floor(v)));
-      try{
-        const img = ctx.getImageData(x,y,w,h);
-        const d = img.data; let r=0,g=0,b=0,cnt=0;
-        for(let i=0;i<d.length;i+=4){ r+=d[i]; g+=d[i+1]; b+=d[i+2]; cnt++; }
-        r=Math.round(r/cnt); g=Math.round(g/cnt); b=Math.round(b/cnt);
-        return {r,g,b};
-      }catch(e){return null}
-    }
-
-    function rgbToHex(c){ return '#' + ((1<<24) + (c.r<<16) + (c.g<<8) + c.b).toString(16).slice(1); }
-
-    function estimateDistance(realWidthCm, perceivedPx){
-      if(!calibration.focalLength) return null;
-      // distance (cm) = (realWidthCm * focal) / perceivedPx
-      return (realWidthCm * calibration.focalLength) / perceivedPx;
-    }
-
-    // Calibrate focal length using known object
-    async function calibrate(){
-      const knownWidth = parseFloat(knownWidthInput.value);
-      const knownDistance = parseFloat(knownDistanceInput.value);
-      const cls = classForCalibration.value;
-      if(!knownWidth || !knownDistance){ alert('Masukkan known width & distance (cm)'); return; }
-      // run single detection and find first matching class
-      const predictions = await model.detect(video);
-      const found = predictions.find(p => p.class.toLowerCase()===cls.toLowerCase());
-      if(!found){ alert('Object not found. Pastikan objek berada di frame dan terdeteksi.'); return; }
-      const perceivedPx = found.bbox[2]; // bbox width
-      calibration.focalLength = (perceivedPx * knownDistance) / knownWidth;
-      calibration.realWidthCm = knownWidth;
-      calibration.calibratedClass = cls;
-      focalEl.textContent = calibration.focalLength.toFixed(2);
-      alert('Kalibrasi selesai — focal length disimpan (session).');
-    }
-
-    async function runDetection(){
-      if(!model) return;
-      if(!running) return;
-      rafId = requestAnimationFrame(runDetection);
-      frameCount++;
-      const skip = parseInt(skipFrames.value || '1',10);
-      if(frameCount % skip !== 0) return;
-
-      // draw current frame to overlay (for sampling)
-      ctx.clearRect(0,0,overlay.width,overlay.height);
-      ctx.drawImage(video,0,0,overlay.width,overlay.height);
-
-      const t0 = performance.now();
-      const predictions = await model.detect(video);
-      const t1 = performance.now();
-
-      lastDetect.textContent = `${predictions.length} objects`;
-      framesForFps++; if(performance.now() - lastFpsTime > 1000){ fpsEl.textContent = framesForFps; framesForFps=0; lastFpsTime=performance.now(); }
-
-      // draw boxes and compute color + distance
-      for(const p of predictions){
-        const box = p.bbox; // [x,y,w,h]
-        // draw semi-transparent rect behind label
-        ctx.font = '14px Inter, Arial';
-        drawBox(box, p.class, p.score, '#06b6d4');
-        // sample color inside box
-        const color = averageColorInBox(box);
-        if(color){
-          // tampilkan warna sebagai teks RGB
-          const rgbText = `RGB(${color.r},${color.g},${color.b})`;
-          ctx.fillStyle = '#000';
-          ctx.fillRect(box[0]+box[2]-84, box[1]+4, 80, 20);
-          ctx.fillStyle = '#fff';
-          ctx.fillText(rgbText, box[0]+box[2]-80, box[1]+20), box[0]+box[2]-34, box[1]+36);
+        async function listCameras(){
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            cameraList.innerHTML = '';
+            devices.filter(d => d.kind === 'videoinput').forEach(d => {
+                const opt = document.createElement('option');
+                opt.value = d.deviceId;
+                opt.textContent = d.label || `Kamera ${cameraList.length+1}`;
+                cameraList.appendChild(opt);
+            });
         }
-        // distance
-        if(calibration.focalLength && calibration.realWidthCm){
-          const est = estimateDistance(calibration.realWidthCm, box[2]);
-          if(est){
-            ctx.fillStyle = 'rgba(0,0,0,0.4)';
-            const txt = `${est.toFixed(0)} cm`;
-            ctx.fillRect(box[0], box[1]+box[3]+4, ctx.measureText(txt).width+8, 18);
-            ctx.fillStyle = '#fff';
-            ctx.fillText(txt, box[0]+4, box[1]+box[3]+18);
-            estDistEl.textContent = `${est.toFixed(0)} cm`;
-          }
+
+        async function startCamera(){
+            if(stream) stopCamera();
+            const deviceId = cameraList.value || undefined;
+            // Gunakan resolusi 640x480 agar konsisten dengan ukuran video-wrap
+            stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: deviceId ? { exact: deviceId } : undefined, width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
+            video.srcObject = stream;
+            await video.play();
+            // Tunggu hingga metadata video dimuat
+            await new Promise(resolve => video.onloadedmetadata = resolve);
+            overlay.width = video.videoWidth;
+            overlay.height = video.videoHeight;
         }
-      }
 
-    }
+        function stopCamera(){
+            if(stream){
+                stream.getTracks().forEach(t => t.stop());
+                stream = null;
+            }
+            if(rafId) cancelAnimationFrame(rafId);
+            running = false;
+        }
 
-    // Events
-    startBtn.addEventListener('click', async ()=>{
-      await listCameras();
-      await startCamera();
-      running = true;
-      if(!model) await loadModel();
-      runDetection();
-    });
-    stopBtn.addEventListener('click', ()=>{ stopCamera(); modelStatus.textContent='stopped'; });
-    calibrateBtn.addEventListener('click', calibrate);
+        async function loadModel(){
+            modelStatus.textContent = 'Memuat...';
+            try {
+                model = await cocoSsd.load();
+                modelStatus.textContent = 'Siap';
+            } catch (error) {
+                modelStatus.textContent = 'Gagal memuat';
+                console.error("Gagal memuat model:", error);
+                alert('Gagal memuat model TensorFlow.js. Coba lagi atau periksa koneksi.');
+            }
+        }
 
-    // init
-    (async ()=>{
-      await listCameras();
-      modelStatus.textContent = 'idle';
-      // quick attempt to autostart if permission previously granted
-      try{ const p = await navigator.permissions.query({name:'camera'}); if(p.state==='granted') startBtn.click(); }catch(e){}
-    })();
+        function drawBox(box, label, score, color){
+            const [x,y,w,h] = box;
+            // Tampilan bounding box
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = color || '#06b6d4'; // Menggunakan warna accent2 (biru)
+            if(showBoxes.checked) ctx.strokeRect(x,y,w,h);
+            
+            if(showLabels.checked){
+                const text = `${label} ${(score*100).toFixed(1)}%`;
+                // Background label
+                ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                ctx.fillRect(x, y-22, ctx.measureText(text).width+10, 20);
+                // Teks label
+                ctx.fillStyle = '#fff';
+                ctx.fillText(text, x+6, y-8);
+            }
+        }
 
-    // handle resize
-    window.addEventListener('resize', ()=>{ if(video.videoWidth){ overlay.width = video.videoWidth; overlay.height = video.videoHeight; }});
-  </script>
+        function averageColorInBox(box){
+            const [x,y,w,h] = box.map(v=>Math.max(0,Math.floor(v)));
+            // Pastikan dimensi valid
+            if(w <= 0 || h <= 0 || w > overlay.width || h > overlay.height) return null;
+            try{
+                // Ambil data gambar dari canvas, bukan video
+                const img = ctx.getImageData(x,y,w,h);
+                const d = img.data; let r=0,g=0,b=0,cnt=0;
+                for(let i=0;i<d.length;i+=4){ r+=d[i]; g+=d[i+1]; b+=d[i+2]; cnt++; }
+                if(cnt === 0) return null;
+                r=Math.round(r/cnt); g=Math.round(g/cnt); b=Math.round(b/cnt);
+                return {r,g,b};
+            }catch(e){
+                console.error("Error saat mengambil data warna:", e);
+                return null;
+            }
+        }
+
+        /**
+         * Konversi nilai RGB menjadi nama warna deskriptif.
+         * Ini adalah fungsi sederhana dan dapat diperluas untuk lebih banyak warna.
+         */
+        function rgbToColorName(r, g, b) {
+            // Jarak Euclidean ke warna dasar (hanya contoh sederhana)
+            const colors = [
+                { name: "Merah", r: 255, g: 0, b: 0 },
+                { name: "Hijau", r: 0, g: 255, b: 0 },
+                { name: "Biru", r: 0, g: 0, b: 255 },
+                { name: "Kuning", r: 255, g: 255, b: 0 },
+                { name: "Cyan", r: 0, g: 255, b: 255 },
+                { name: "Magenta", r: 255, g: 0, b: 255 },
+                { name: "Putih", r: 255, g: 255, b: 255 },
+                { name: "Hitam", r: 0, g: 0, b: 0 },
+                { name: "Abu-abu", r: 128, g: 128, b: 128 },
+                { name: "Oranye", r: 255, g: 165, b: 0 },
+                { name: "Ungu", r: 128, g: 0, b: 128 },
+            ];
+
+            let minDistance = Infinity;
+            let closestColor = "Tidak Dikenal";
+
+            for (const color of colors) {
+                const dr = r - color.r;
+                const dg = g - color.g;
+                const db = b - color.b;
+                // Menggunakan jarak kuadrat (menghindari operasi sqrt)
+                const distance = dr * dr + dg * dg + db * db;
+
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestColor = color.name;
+                }
+            }
+
+            // Batas sederhana untuk menghindari klasifikasi warna yang terlalu gelap/terang sebagai warna murni
+            if (r < 50 && g < 50 && b < 50) return "Hitam";
+            if (r > 200 && g > 200 && b > 200) return "Putih";
+            
+            // Jika jaraknya terlalu jauh, mungkin itu adalah nuansa yang kompleks
+            // Namun, untuk demo sederhana ini, kita hanya mengembalikan warna terdekat.
+            return closestColor;
+        }
+
+
+        function estimateDistance(realWidthCm, perceivedPx){
+            if(!calibration.focalLength) return null;
+            // Rumus: distance (cm) = (realWidthCm * focalLength) / perceivedPx
+            return (realWidthCm * calibration.focalLength) / perceivedPx;
+        }
+
+        // Calibrate focal length using known object
+        async function calibrate(){
+            const knownWidth = parseFloat(knownWidthInput.value);
+            const knownDistance = parseFloat(knownDistanceInput.value);
+            const cls = classForCalibration.value;
+            if(!knownWidth || !knownDistance){ alert('Masukkan lebar dan jarak diketahui (cm) dengan benar.'); return; }
+            
+            // Pastikan model sudah dimuat dan kamera aktif
+            if(!model || !stream){
+                alert('Pastikan kamera sudah di-Start dan model sudah dimuat.');
+                return;
+            }
+
+            // run single detection and find first matching class
+            const predictions = await model.detect(video);
+            const found = predictions.find(p => p.class.toLowerCase()===cls.toLowerCase());
+            
+            if(!found){ alert(`Objek '${cls}' tidak ditemukan. Pastikan objek berada di frame dan terdeteksi.`); return; }
+            
+            const perceivedPx = found.bbox[2]; // bbox width (lebar dalam piksel)
+            
+            if (perceivedPx === 0) {
+                alert('Lebar objek yang terdeteksi adalah 0 piksel. Coba lagi.');
+                return;
+            }
+            
+            calibration.focalLength = (perceivedPx * knownDistance) / knownWidth;
+            calibration.realWidthCm = knownWidth;
+            calibration.calibratedClass = cls;
+            
+            focalEl.textContent = calibration.focalLength.toFixed(2);
+            alert(`Kalibrasi selesai: Focal Length ${calibration.focalLength.toFixed(2)} disimpan (session).`);
+        }
+
+        async function runDetection(){
+            if(!model) return;
+            if(!running) return;
+            rafId = requestAnimationFrame(runDetection);
+            frameCount++;
+            const skip = parseInt(skipFrames.value || '1',10);
+            
+            // Hanya proses deteksi jika frameCount mencapai nilai skip
+            if(frameCount % skip !== 0) return;
+
+            // Gambar frame saat ini ke overlay (PENTING untuk sampling warna)
+            ctx.clearRect(0,0,overlay.width,overlay.height);
+            ctx.drawImage(video,0,0,overlay.width,overlay.height);
+
+            const t0 = performance.now();
+            // Panggil deteksi menggunakan tensor dari video
+            const predictions = await model.detect(video);
+            const t1 = performance.now();
+
+            lastDetect.textContent = `${predictions.length} objek (${(t1-t0).toFixed(0)} ms)`;
+            
+            // Hitung FPS
+            framesForFps++; 
+            if(performance.now() - lastFpsTime > 1000){ 
+                fpsEl.textContent = framesForFps; 
+                framesForFps=0; 
+                lastFpsTime=performance.now(); 
+            }
+
+            let estDistCurrent = '—'; // Untuk menampilkan jarak estimasi di badge
+
+            // gambar kotak dan hitung warna + jarak
+            for(const p of predictions){
+                const box = p.bbox; // [x,y,w,h]
+                ctx.font = '14px sans-serif'; // Menggunakan font sans-serif
+                
+                // --- Deteksi Warna ---
+                const color = averageColorInBox(box);
+                let colorName = 'N/A';
+                
+                if(color){
+                    colorName = rgbToColorName(color.r, color.g, color.b);
+                    // Tampilkan Nama Warna
+                    const colorText = `${colorName}`;
+                    const colorX = box[0] + box[2] - ctx.measureText(colorText).width - 14;
+                    const colorY = box[1] + 20;
+
+                    // Background warna
+                    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                    ctx.fillRect(colorX - 4, box[1] + 4, ctx.measureText(colorText).width + 8, 18);
+                    
+                    // Teks warna
+                    ctx.fillStyle = '#fff';
+                    ctx.fillText(colorText, colorX, colorY);
+                }
+
+                // Gambar kotak deteksi
+                drawBox(box, p.class, p.score, '#21a366'); // Menggunakan warna hijau/teal
+
+                // --- Estimasi Jarak ---
+                if(calibration.focalLength && calibration.realWidthCm && p.class.toLowerCase() === calibration.calibratedClass.toLowerCase()){
+                    const est = estimateDistance(calibration.realWidthCm, box[2]);
+                    if(est){
+                        const txt = `${est.toFixed(1)} cm`; // Akurasi 1 desimal
+                        
+                        // Background jarak
+                        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                        ctx.fillRect(box[0], box[1]+box[3]+4, ctx.measureText(txt).width+8, 18);
+                        
+                        // Teks jarak
+                        ctx.fillStyle = '#fff';
+                        ctx.fillText(txt, box[0]+4, box[1]+box[3]+18);
+                        
+                        estDistCurrent = txt; // Update untuk badge
+                    }
+                }
+            }
+            
+            // Update badge Est. Jarak
+            estDistEl.textContent = estDistCurrent;
+        }
+
+        // Events
+        startBtn.addEventListener('click', async ()=>{
+            // Stop dulu jika sedang berjalan
+            if(running) stopCamera(); 
+            
+            await listCameras();
+            try {
+                await startCamera();
+                running = true;
+                if(!model) await loadModel();
+                runDetection();
+            } catch (e) {
+                alert('Gagal memulai kamera. Pastikan akses kamera diizinkan.');
+                console.error("Gagal memulai kamera:", e);
+                running = false;
+            }
+        });
+        stopBtn.addEventListener('click', ()=>{ stopCamera(); modelStatus.textContent='Dihentikan'; });
+        calibrateBtn.addEventListener('click', calibrate);
+
+        // init
+        (async ()=>{
+            await listCameras();
+            modelStatus.textContent = 'Siap';
+            // Coba memuat model di awal untuk mempersingkat waktu start
+            loadModel(); 
+            // quick attempt to autostart if permission previously granted
+            try{ const p = await navigator.permissions.query({name:'camera'}); if(p.state==='granted') startBtn.click(); }catch(e){}
+        })();
+
+        // handle resize (perlu diubah karena resolusi video fixed 640x480)
+        window.addEventListener('resize', ()=>{ 
+            // Jika video sudah aktif, pastikan overlay tetap sesuai resolusi video
+            if(video.videoWidth){ 
+                overlay.width = video.videoWidth; 
+                overlay.height = video.videoHeight; 
+            }
+        });
+    </script>
 </body>
 </html>
