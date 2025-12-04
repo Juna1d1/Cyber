@@ -2,282 +2,537 @@
 <html lang="id">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Object Detection — Single Frame</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Realtime Object Detection — TensorFlow.js (COCO-SSD)</title>
+
+  <!-- TensorFlow.js + COCO-SSD via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
 
   <style>
-    body {
-      margin: 0;
-      font-family: "Segoe UI", Roboto, sans-serif;
-      background: linear-gradient(135deg, #1e1e2f, #2a2d45);
-      color: #eee;
-      min-height: 100vh;
-      padding: 20px;
+    :root{
+      --bg:#0f1724;
+      --card:#0b1220;
+      --muted:#9aa4b2;
+      --accent:#06b6d4;
+      --glass: rgba(255,255,255,0.04);
+      --success: #10b981;
+    }
+    *{box-sizing:border-box;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;}
+    body{
+      margin:0;
+      min-height:100vh;
+      background: linear-gradient(180deg,#071027 0%, #071b2b 100%);
+      color:#e6eef6;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:28px;
     }
 
-    h1 {
-      text-align: center;
-      margin-bottom: 10px;
-      font-size: 26px;
-      color: #7df3ff;
-      text-shadow: 0 0 10px rgba(125,243,255,0.5);
+    .wrap{
+      width:100%;
+      max-width:1100px;
+      border-radius:12px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      box-shadow: 0 10px 30px rgba(2,6,23,0.7);
+      padding:18px;
+      display:grid;
+      grid-template-columns: 640px 1fr;
+      gap:18px;
     }
 
-    .card {
-      max-width: 900px;
-      margin: auto;
-      background: rgba(255,255,255,0.07);
-      border: 1px solid rgba(255,255,255,0.12);
-      padding: 20px;
-      border-radius: 16px;
-      backdrop-filter: blur(10px);
-      box-shadow: 0 0 20px rgba(0,0,0,0.4);
+    /* Left: video + overlay */
+    .video-card{
+      background:var(--card);
+      border-radius:10px;
+      padding:12px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+    }
+    #videoWrap{
+      position:relative;
+      width:100%;
+      max-width:640px;
+      background: #000;
+      border-radius:8px;
+      overflow:hidden;
+    }
+    video, canvas{
+      width:100%;
+      height:auto;
+      display:block;
     }
 
-    .controls {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      margin-bottom: 18px;
-      justify-content: center;
+    .controls{
+      margin-top:10px;
+      width:100%;
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
     }
 
-    select, button, input[type="number"] {
-      padding: 8px 10px;
-      border-radius: 10px;
-      border: none;
-      outline: none;
-      background: rgba(255,255,255,0.15);
-      color: #fff;
-      font-size: 14px;
-      backdrop-filter: blur(4px);
+    button{
+      background:linear-gradient(180deg,var(--accent),#0891b2);
+      color:#04232f;
+      border:0;
+      padding:8px 12px;
+      border-radius:8px;
+      font-weight:600;
+      cursor:pointer;
+      box-shadow: 0 6px 18px rgba(6,182,212,0.12);
+    }
+    button.ghost{
+      background:transparent;
+      color:var(--muted);
+      border:1px solid rgba(255,255,255,0.04);
+      box-shadow:none;
     }
 
-    button {
-      cursor: pointer;
-      background: #00d4ff;
-      color: #000;
-      font-weight: bold;
-      transition: 0.2s;
-    }
-    button:hover {
-      background: #7df3ff;
+    .panel{
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border-radius:10px;
+      padding:12px;
     }
 
-    #videoContainer {
-      position: relative;
-      width: 100%;
-      max-width: 900px;
-      margin: auto;
-      border-radius: 12px;
-      overflow: hidden;
-      box-shadow: 0 0 25px rgba(0,0,0,0.6);
+    /* Right: settings/logs */
+    .side{
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+    .row{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      justify-content:space-between;
+      margin-bottom:6px;
+    }
+    label{font-size:13px;color:var(--muted);}
+    select,input[type="range"]{width:100%}
+    .muted{color:var(--muted);font-size:13px;margin-top:6px;}
+
+    .status{
+      padding:8px 10px;border-radius:8px;
+      background:var(--glass);
+      font-weight:600;
+      color:var(--muted);
     }
 
-    video, canvas {
-      width: 100%;
-      display: block;
+    .log{
+      max-height:240px;
+      overflow:auto;
+      padding:8px;
+      background:rgba(0,0,0,0.25);
+      border-radius:8px;
+      font-family:monospace;
+      font-size:13px;
+      color:#d7e6f3;
     }
 
-    #log {
-      margin-top: 10px;
-      text-align: center;
-      padding: 10px;
-      background: rgba(0,0,0,0.3);
-      border-radius: 10px;
-      font-size: 14px;
-      color: #b7ffb7;
+    .legend{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
     }
+    .chip{
+      padding:6px 9px;border-radius:999px;background:rgba(255,255,255,0.03);
+      font-size:13px;color:var(--muted);
+    }
+
+    footer{grid-column:1/-1;margin-top:6px;text-align:center;color:var(--muted);font-size:13px;}
+    a.link{color:var(--accent);text-decoration:none;font-weight:600}
+    .topbar{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:8px}
+
+    /* small screens */
+    @media (max-width:1000px){
+      .wrap{grid-template-columns:1fr; padding:12px}
+      .video-card{order:1}
+    }
+    /* box label style drawn on canvas */
   </style>
-
-  <!-- TensorFlow -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2"></script>
 </head>
-
 <body>
+  <div class="wrap" role="main">
+    <div class="video-card panel" aria-live="polite">
+      <div class="topbar">
+        <div>
+          <h2 style="margin:0;font-size:18px">Realtime Object Detection</h2>
+          <div class="muted">TensorFlow.js + COCO-SSD — Jalankan lewat webcam (GitHub Pages ready)</div>
+        </div>
+        <div class="legend">
+          <div class="chip">Model: <strong id="modelLabel">memuat...</strong></div>
+          <div class="chip">FPS: <strong id="fps">-</strong></div>
+        </div>
+      </div>
 
-  <h1>Object Detection — Single Frame</h1>
+      <div id="videoWrap" aria-hidden="false">
+        <video id="video" playsinline autoplay muted></video>
+        <canvas id="overlay"></canvas>
+      </div>
 
-  <div class="card">
-    <div class="controls">
-      <select id="videoSelect"></select>
+      <div class="controls" aria-hidden="false">
+        <select id="cameraSelect" class="ghost" title="Pilih kamera (jika tersedia)">
+          <option value="">Pilih kamera...</option>
+        </select>
 
-      <select id="resolution">
-        <option value="640x480">640×480</option>
-        <option value="480x360">480×360</option>
-        <option value="320x240">320×240</option>
-      </select>
+        <select id="resolution" class="ghost" title="Resolusi">
+          <option value="640x480">640×480</option>
+          <option value="480x360">480×360</option>
+          <option value="320x240">320×240</option>
+        </select>
 
-      <label>
-        Confidence ≥
-        <input id="minScore" type="number" value="0.5" step="0.05" min="0" max="1">
-      </label>
+        <button id="startBtn">Start</button>
+        <button id="stopBtn" class="ghost" disabled>Stop</button>
+        <button id="snapBtn" class="ghost" title="Ambil snapshot">Snapshot</button>
+      </div>
 
-      <button id="startBtn">Start Camera</button>
-      <button id="stopBtn" disabled>Stop</button>
-      <button id="detectBtn" disabled>Detect 1x</button>
-      <button id="snapshotBtn" disabled>Snapshot</button>
+      <div style="margin-top:10px;display:flex;gap:8px;align-items:center;justify-content:space-between;">
+        <div style="width:60%;">
+          <label for="threshold">Confidence threshold: <span id="thLabel">0.5</span></label>
+          <input id="threshold" type="range" min="0" max="1" step="0.01" value="0.5">
+        </div>
+        <div style="text-align:right">
+          <div class="status" id="status">Model: belum dimuat</div>
+        </div>
+      </div>
     </div>
 
-    <div id="videoContainer">
-      <video id="video" autoplay playsinline muted></video>
-      <canvas id="overlay"></canvas>
+    <div class="side">
+      <div class="panel">
+        <h3 style="margin:0 0 8px 0">Pilihan & Info Kamera</h3>
+        <div class="row">
+          <label>Mode Mirror</label>
+          <input type="checkbox" id="mirror" checked>
+        </div>
+        <div class="row">
+          <label>Pilihan Model</label>
+          <select id="modelSelect">
+            <option value="coco-ssd">coco-ssd (recommended)</option>
+          </select>
+        </div>
+        <div class="muted">Tip: Jika kamera tidak muncul, tekan "Start" lalu izinkan akses kamera pada browser.</div>
+      </div>
+
+      <div class="panel">
+        <h3 style="margin:0 0 8px 0">Log Deteksi</h3>
+        <div class="log" id="log">— ready —</div>
+      </div>
+
+      <div class="panel">
+        <h3 style="margin:0 0 8px 0">Snapshot</h3>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <a id="downloadLink" class="ghost" style="display:inline-block;text-decoration:none;padding:8px 12px;border-radius:8px;">Download terakhir</a>
+          <div class="muted" style="font-size:13px">Snapshot berformat PNG</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3 style="margin:0 0 8px 0">Informasi</h3>
+        <div class="muted">File ini bebas dipakai. Terinspirasi dari halaman contoh yang kamu kirim. :contentReference[oaicite:1]{index=1}</div>
+        <div style="margin-top:8px" class="muted">Jika kamu ingin model yang lebih ringan / cepat, bisa diganti ke <code>mobilenet</code> / model lain (butuh penyesuaian).</div>
+      </div>
     </div>
 
-    <div id="log">Status: Memuat model...</div>
+    <footer>Designed for GitHub Pages — letakkan file sebagai <code>index.html</code> di repo. Jika butuh versi dengan model berbeda, bilang aja ya.</footer>
   </div>
 
 <script>
 (async () => {
-  const video = document.getElementById("video");
-  const canvas = document.getElementById("overlay");
-  const ctx = canvas.getContext("2d");
-
-  const videoSelect = document.getElementById("videoSelect");
-  const resolution = document.getElementById("resolution");
-  const minScoreEl = document.getElementById("minScore");
-
-  const startBtn = document.getElementById("startBtn");
-  const stopBtn = document.getElementById("stopBtn");
-  const detectBtn = document.getElementById("detectBtn");
-  const snapshotBtn = document.getElementById("snapshotBtn");
-
-  const log = document.getElementById("log");
+  const video = document.getElementById('video');
+  const overlay = document.getElementById('overlay');
+  const ctx = overlay.getContext('2d', { alpha: true });
+  const startBtn = document.getElementById('startBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const snapBtn = document.getElementById('snapBtn');
+  const cameraSelect = document.getElementById('cameraSelect');
+  const resolutionSelect = document.getElementById('resolution');
+  const thresholdRange = document.getElementById('threshold');
+  const thLabel = document.getElementById('thLabel');
+  const statusEl = document.getElementById('status');
+  const logEl = document.getElementById('log');
+  const modelLabel = document.getElementById('modelLabel');
+  const fpsEl = document.getElementById('fps');
+  const mirrorCheckbox = document.getElementById('mirror');
+  const downloadLink = document.getElementById('downloadLink');
 
   let model = null;
   let stream = null;
+  let detectLoopActive = false;
+  let lastFrameTime = performance.now();
+  let avgFps = 0;
 
-  function info(t) {
-    log.textContent = "Status: " + t;
+  // load model
+  statusEl.textContent = 'Memuat model coco-ssd...';
+  try {
+    model = await cocoSsd.load(); // default
+    modelLabel.textContent = 'coco-ssd';
+    statusEl.textContent = 'Model siap — tekan Start';
+    log('Model coco-ssd dimuat.');
+  } catch (e) {
+    console.error(e);
+    statusEl.textContent = 'Gagal memuat model';
+    log('Error memuat model: ' + e.message);
+    return;
   }
 
-  info("Memuat model...");
-  model = await cocoSsd.load();
-  info("Model siap.");
-
-  // === LIST DEVICE ===
-  async function updateCameraList() {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const cams = devices.filter(d => d.kind === "videoinput");
-
-    videoSelect.innerHTML = "";
-    cams.forEach((cam, i) => {
-      const opt = document.createElement("option");
-      opt.value = cam.deviceId;
-      opt.textContent = cam.label || `Camera ${i+1}`;
-      videoSelect.appendChild(opt);
-    });
-  }
-  await updateCameraList();
-
-  // === START CAMERA ===
-  async function start() {
-    const deviceId = videoSelect.value;
-    const [w,h] = resolution.value.split("x").map(Number);
-
-    if (stream) stopStream();
-
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: w, height: h, deviceId: { exact: deviceId }},
-        audio: false
+  // enumerate cameras
+  async function updateCameras(){
+    try{
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cams = devices.filter(d=>d.kind==='videoinput');
+      cameraSelect.innerHTML = '';
+      if(cams.length===0){
+        cameraSelect.innerHTML = '<option value="">(Tidak ada kamera)</option>';
+        return;
+      }
+      cams.forEach((c, idx) => {
+        const opt = document.createElement('option');
+        opt.value = c.deviceId;
+        opt.text = c.label || `Camera ${idx+1}`;
+        cameraSelect.appendChild(opt);
       });
-
-      video.srcObject = stream;
-      await video.play();
-
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-
-      startBtn.disabled = true;
-      stopBtn.disabled = false;
-      detectBtn.disabled = false;
-      snapshotBtn.disabled = false;
-
-      info("Kamera aktif.");
-
-    } catch (e) {
-      info("Gagal akses kamera: " + e.message);
+    }catch(err){
+      console.warn('enumerateDevices failed', err);
+      cameraSelect.innerHTML = '<option value="">(Tidak dapat mengakses daftar kamera)</option>';
     }
   }
-  startBtn.onclick = start;
 
-  // === STOP CAMERA ===
-  function stopStream() {
-    if (stream) stream.getTracks().forEach(t => t.stop());
-    stream = null;
+  await updateCameras();
 
-    ctx.clearRect(0,0,canvas.width,canvas.height);
+  // helper: log
+  function log(txt){
+    const t = new Date().toLocaleTimeString();
+    logEl.innerText = `[${t}] ${txt}\n` + logEl.innerText;
+  }
 
+  // set canvas size from video
+  function syncCanvas(){
+    const w = video.videoWidth;
+    const h = video.videoHeight;
+    overlay.width = w;
+    overlay.height = h;
+    overlay.style.width = video.clientWidth + 'px';
+  }
+
+  // start camera
+  async function startCamera(){
+    stopCamera();
+    const resolution = resolutionSelect.value.split('x').map(Number);
+    const constraints = {
+      audio: false,
+      video: {
+        deviceId: cameraSelect.value || undefined,
+        width: { ideal: resolution[0] },
+        height: { ideal: resolution[1] },
+        facingMode: 'environment'
+      }
+    };
+    try {
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
+      video.srcObject = stream;
+      await video.play();
+      syncCanvas();
+      startDetectionLoop();
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      statusEl.textContent = 'Streaming — mendeteksi...';
+      log('Kamera dimulai.');
+      await updateCameras(); // refresh labels (browsers expose labels only after permission)
+    } catch (e) {
+      console.error(e);
+      statusEl.textContent = 'Gagal akses kamera';
+      log('Gagal akses kamera: ' + e.message);
+    }
+  }
+
+  function stopCamera(){
+    if(stream){
+      stream.getTracks().forEach(t => t.stop());
+      stream = null;
+    }
+    stopDetectionLoop();
     startBtn.disabled = false;
     stopBtn.disabled = true;
-    detectBtn.disabled = true;
-    snapshotBtn.disabled = true;
-
-    info("Kamera dihentikan.");
+    statusEl.textContent = 'Kamera dihentikan';
+    log('Kamera dihentikan.');
   }
-  stopBtn.onclick = stopStream;
 
-  // === SNAPSHOT ===
-  snapshotBtn.onclick = () => {
-    const out = document.createElement("canvas");
-    out.width = canvas.width;
-    out.height = canvas.height;
+  // detection loop
+  async function detectFrame(){
+    if(!detectLoopActive) return;
+    if(video.readyState < 2){
+      requestAnimationFrame(detectFrame);
+      return;
+    }
+    syncCanvas();
+    // mirror?
+    const mirror = mirrorCheckbox.checked;
+    if(mirror){
+      ctx.setTransform(-1,0,0,1,overlay.width,0);
+    } else {
+      ctx.setTransform(1,0,0,1,0,0);
+    }
+    // draw current frame lightly as background (optional)
+    ctx.clearRect(0,0,overlay.width,overlay.height);
 
-    const octx = out.getContext("2d");
-    octx.drawImage(video, 0, 0, out.width, out.height);
-    octx.drawImage(canvas, 0, 0);
+    const t0 = performance.now();
+    // perform detect
+    try {
+      const predictions = await model.detect(video, 5); // return up to 5 objects
+      const t1 = performance.now();
 
-    out.toBlob(b => {
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(b);
-      a.download = "snapshot.png";
-      a.click();
-    });
-  };
+      // FPS
+      const dt = t1 - lastFrameTime;
+      lastFrameTime = t1;
+      const fps = dt ? (1000/dt) : 0;
+      avgFps = avgFps ? (avgFps*0.85 + fps*0.15) : fps;
+      fpsEl.textContent = avgFps.toFixed(1);
 
-  // === DETECT 1 FRAME ===
-  detectBtn.onclick = async () => {
-    if (!model || !video.srcObject) return;
+      drawPredictions(predictions);
+      // log top detection occasionally
+      if(predictions && predictions.length){
+        const top = predictions[0];
+        log(`Detected: ${top.class} (${(top.score*100).toFixed(1)}%)`);
+      }
+    } catch (e){
+      console.error('detect error', e);
+      log('Error detect: ' + e.message);
+    }
 
-    info("Mendeteksi 1 frame...");
-
-    const preds = await model.detect(video);
-    draw(preds);
-
-    info("Deteksi selesai (" + preds.length + " objek)");
-  };
-
-  // === DRAW BOX ===
-  function draw(preds) {
-    const ms = parseFloat(minScoreEl.value) || 0.5;
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-
-    preds.forEach(p => {
-      if (p.score < ms) return;
-
-      const [x,y,w,h] = p.bbox;
-
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = "#00ff99";
-      ctx.fillStyle = "rgba(0,255,150,0.18)";
-
-      ctx.strokeRect(x,y,w,h);
-      ctx.fillRect(x,y,w,h);
-
-      const label = `${p.class} ${(p.score*100).toFixed(1)}%`;
-
-      ctx.fillStyle = "#000";
-      ctx.fillRect(x, y - 20, ctx.measureText(label).width + 10, 20);
-
-      ctx.fillStyle = "#00ff99";
-      ctx.font = "14px Arial";
-      ctx.fillText(label, x + 4, y - 6);
-    });
+    requestAnimationFrame(detectFrame);
   }
+
+  function drawPredictions(predictions){
+    const minScore = parseFloat(thresholdRange.value) || 0.5;
+    // clear
+    ctx.clearRect(0,0,overlay.width,overlay.height);
+
+    // font settings
+    const font = Math.max(12, Math.round(overlay.width/60));
+    ctx.font = `${font}px sans-serif`;
+    ctx.textBaseline = 'top';
+
+    predictions.forEach(p => {
+      if(p.score < minScore) return;
+      const [x, y, w, h] = p.bbox;
+      // stroked rect
+      ctx.lineWidth = Math.max(2, overlay.width/320);
+      ctx.strokeStyle = 'rgba(6,182,212,0.95)';
+      ctx.fillStyle = 'rgba(6,182,212,0.12)';
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeRect(x, y, w, h);
+
+      // label background
+      const label = `${p.class} ${(p.score*100).toFixed(0)}%`;
+      const textWidth = ctx.measureText(label).width;
+      const pad = 6;
+      const rectH = font + pad;
+      const rectW = textWidth + pad*2;
+
+      // background
+      ctx.setTransform(1,0,0,1,0,0); // reset for label always left-to-right
+      // if mirror is enabled, we want label to match visually; handle by computing mirrored x
+      const isMirror = mirrorCheckbox.checked;
+      const drawX = isMirror ? (overlay.width - (x + w)) : x;
+      ctx.fillStyle = 'rgba(4,10,14,0.8)';
+      ctx.fillRect(drawX, y - rectH >= 0 ? y - rectH : y, rectW, rectH);
+
+      // text
+      ctx.fillStyle = '#dff8fb';
+      ctx.fillText(label, drawX + pad, (y - rectH >= 0 ? y - rectH : y) + 2);
+
+      // restore transform for next shapes
+      if(isMirror){
+        ctx.setTransform(-1,0,0,1,overlay.width,0);
+      } else {
+        ctx.setTransform(1,0,0,1,0,0);
+      }
+    });
+
+    // restore normal transform
+    ctx.setTransform(1,0,0,1,0,0);
+  }
+
+  function startDetectionLoop(){
+    if(detectLoopActive) return;
+    detectLoopActive = true;
+    lastFrameTime = performance.now();
+    requestAnimationFrame(detectFrame);
+  }
+  function stopDetectionLoop(){
+    detectLoopActive = false;
+    fpsEl.textContent = '-';
+    // clear overlay
+    ctx.clearRect(0,0,overlay.width,overlay.height);
+  }
+
+  // snapshot
+  snapBtn.addEventListener('click', () => {
+    if(!video || video.videoWidth===0) {
+      log('Video belum tersedia untuk snapshot.');
+      return;
+    }
+    const tmp = document.createElement('canvas');
+    tmp.width = video.videoWidth;
+    tmp.height = video.videoHeight;
+    const tctx = tmp.getContext('2d');
+    // apply mirror if set
+    if(mirrorCheckbox.checked){
+      tctx.setTransform(-1,0,0,1,tmp.width,0);
+    }
+    tctx.drawImage(video, 0, 0, tmp.width, tmp.height);
+    // draw overlay boxes on snapshot
+    tctx.setTransform(1,0,0,1,0,0);
+    tctx.drawImage(overlay, 0, 0, tmp.width, tmp.height);
+    tmp.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      downloadLink.href = url;
+      downloadLink.download = `snapshot_${Date.now()}.png`;
+      downloadLink.textContent = 'Download terakhir';
+      log('Snapshot diambil.');
+    }, 'image/png');
+  });
+
+  // UI button bindings
+  startBtn.addEventListener('click', startCamera);
+  stopBtn.addEventListener('click', stopCamera);
+
+  thresholdRange.addEventListener('input', () => {
+    thLabel.textContent = thresholdRange.value;
+  });
+
+  resolutionSelect.addEventListener('change', () => {
+    // restart camera with new resolution if running
+    if(stream) startCamera();
+  });
+
+  cameraSelect.addEventListener('change', () => {
+    if(stream) startCamera();
+  });
+
+  // update cameras when permissions change (some browsers)
+  navigator.mediaDevices.addEventListener?.('devicechange', updateCameras);
+
+  // friendly fallback
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    statusEl.textContent = 'Browser tidak mendukung getUserMedia';
+    log('getUserMedia tidak tersedia di browser ini.');
+  }
+
+  // accessibility: keyboard shortcuts
+  window.addEventListener('keydown', (e) => {
+    if(e.key === 's') startBtn.click();
+    if(e.key === 'x') stopBtn.click();
+    if(e.key === 'p') snapBtn.click();
+  });
+
+  // initial log
+  log('Halaman siap. Tekan Start untuk memulai deteksi.');
 })();
 </script>
-
 </body>
 </html>
